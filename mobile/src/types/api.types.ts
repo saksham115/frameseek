@@ -36,6 +36,7 @@ export interface UserData {
   plan_type: string;
   storage_used_bytes: number;
   storage_limit_bytes: number;
+  tos_accepted_at: string | null;
 }
 
 export interface AuthData {

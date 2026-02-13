@@ -1,7 +1,8 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTheme } from '../../hooks/useTheme';
 import { BorderRadius, FontFamily, FontSize, Spacing } from '../../constants/theme';
@@ -9,6 +10,7 @@ import { useAuthStore } from '../../store/slices/authSlice';
 import { apiClient } from '../../services/api';
 import SearchBar from '../../components/search/SearchBar';
 import FAB from '../../components/common/FAB';
+import FrameSeekIcon from '../../components/common/FrameSeekIcon';
 import type { AppStackParamList } from '../../types/navigation.types';
 import type { VideoData } from '../../types/api.types';
 import { formatDuration, formatTimeAgo } from '../../utils/formatting';
@@ -28,7 +30,7 @@ export default function DashboardScreen() {
     } catch {}
   }, []);
 
-  useEffect(() => { loadData(); }, []);
+  useFocusEffect(useCallback(() => { loadData(); }, [loadData]));
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -42,9 +44,12 @@ export default function DashboardScreen() {
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.amber} />}
       >
-        <Text style={[styles.greeting, { color: colors.text }]}>
-          Hello{user?.name ? `, ${user.name.split(' ')[0]}` : ''}
-        </Text>
+        <View style={styles.titleRow}>
+          <FrameSeekIcon size={28} />
+          <Text style={[styles.greeting, { color: colors.text }]}>
+            Hello{user?.name ? `, ${user.name.split(' ')[0]}` : ''}
+          </Text>
+        </View>
 
         <SearchBar
           value={searchQuery}
@@ -99,7 +104,8 @@ const CARD_WIDTH = 160;
 const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { padding: Spacing.xl, paddingTop: Spacing.xxxl + 20 },
-  greeting: { fontFamily: FontFamily.bold, fontSize: FontSize.xxl, marginBottom: Spacing.lg },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginBottom: Spacing.lg },
+  greeting: { fontFamily: FontFamily.bold, fontSize: FontSize.xxl },
   section: { marginTop: Spacing.xl },
   sectionTitle: { fontFamily: FontFamily.semiBold, fontSize: FontSize.lg, marginBottom: Spacing.md },
   carousel: { gap: Spacing.md },

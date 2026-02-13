@@ -1,8 +1,10 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.schemas.auth import AuthResponse, LoginRequest, LogoutRequest, RefreshRequest, RegisterRequest, Tokens
+from app.dependencies import get_current_user
+from app.models.user import User
+from app.schemas.auth import AcceptTosRequest, AuthResponse, LoginRequest, LogoutRequest, RefreshRequest, RegisterRequest, Tokens, UserResponse
 from app.schemas.common import ApiResponse
 from app.services.auth_service import AuthService
 
@@ -27,6 +29,24 @@ async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
 async def refresh(data: RefreshRequest, db: AsyncSession = Depends(get_db)):
     service = AuthService(db)
     result = await service.refresh(data.refresh_token)
+    return ApiResponse(data=result)
+
+
+@router.get("/me", response_model=ApiResponse[UserResponse])
+async def get_me(current_user: User = Depends(get_current_user)):
+    return ApiResponse(data=UserResponse.model_validate(current_user))
+
+
+@router.post("/accept-tos", response_model=ApiResponse[UserResponse])
+async def accept_tos(
+    data: AcceptTosRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if not data.accepted:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Terms must be accepted")
+    service = AuthService(db)
+    result = await service.accept_tos(current_user.user_id)
     return ApiResponse(data=result)
 
 

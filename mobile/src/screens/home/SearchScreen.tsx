@@ -12,6 +12,7 @@ import VideoSearchCard from '../../components/search/VideoSearchCard';
 import EmptyState from '../../components/common/EmptyState';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import Chip from '../../components/common/Chip';
+import FrameSeekIcon from '../../components/common/FrameSeekIcon';
 import type { AppStackParamList } from '../../types/navigation.types';
 import type { SearchResultData } from '../../types/api.types';
 
@@ -69,7 +70,10 @@ export default function SearchScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={styles.header}>
-        <Text style={[styles.title, { color: colors.text }]}>Search</Text>
+        <View style={styles.titleRow}>
+          <FrameSeekIcon size={24} />
+          <Text style={[styles.title, { color: colors.text }]}>Search</Text>
+        </View>
         <SearchBar
           value={query}
           onChangeText={setQuery}
@@ -120,6 +124,7 @@ export default function SearchScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   header: { padding: Spacing.xl, paddingTop: Spacing.xxxl + 20, gap: Spacing.sm },
+  titleRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: Spacing.sm },
   title: { fontFamily: FontFamily.bold, fontSize: FontSize.xxl },
   meta: { fontFamily: FontFamily.regular, fontSize: FontSize.xs },
   list: { padding: Spacing.xl, paddingTop: 0 },

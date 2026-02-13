@@ -36,6 +36,9 @@ class User(Base):
     google_refresh_token: Mapped[str | None] = mapped_column(Text)
     google_token_expires_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
 
+    # Terms of Service
+    tos_accepted_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
+
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())

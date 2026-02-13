@@ -5,6 +5,7 @@ import { useAuthStore } from '../../store/slices/authSlice';
 import { FontFamily, FontSize, Spacing } from '../../constants/theme';
 import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
+import FrameSeekIcon from '../../components/common/FrameSeekIcon';
 import type { LoginScreenProps } from '../../types/navigation.types';
 
 export default function LoginScreen({ navigation }: LoginScreenProps) {
@@ -34,6 +35,7 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.header}>
+          <FrameSeekIcon size={56} />
           <Text style={[styles.logo]}>
             <Text style={{ color: colors.text }}>Frame</Text>
             <Text style={{ color: colors.amber }}>Seek</Text>
@@ -85,6 +87,7 @@ const styles = StyleSheet.create({
   header: {
     alignItems: 'center',
     marginBottom: Spacing.xxxl,
+    gap: Spacing.md,
   },
   logo: {
     fontFamily: FontFamily.bold,

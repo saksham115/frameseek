@@ -10,6 +10,7 @@ import SegmentControl from '../../components/common/SegmentControl';
 import FAB from '../../components/common/FAB';
 import EmptyState from '../../components/common/EmptyState';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
+import FrameSeekIcon from '../../components/common/FrameSeekIcon';
 import type { AppStackParamList } from '../../types/navigation.types';
 
 const SEGMENTS = ['All', 'Processing', 'Ready'];
@@ -67,7 +68,10 @@ export default function VideosScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={styles.header}>
-        <Text style={[styles.title, { color: colors.text }]}>Videos</Text>
+        <View style={styles.titleRow}>
+          <FrameSeekIcon size={24} />
+          <Text style={[styles.title, { color: colors.text }]}>Videos</Text>
+        </View>
         <SegmentControl segments={SEGMENTS} activeIndex={segmentIndex} onChange={handleSegmentChange} />
       </View>
 
@@ -105,6 +109,7 @@ export default function VideosScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   header: { padding: Spacing.xl, paddingTop: Spacing.xxxl + 20, gap: Spacing.md },
+  titleRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: Spacing.sm },
   title: { fontFamily: FontFamily.bold, fontSize: FontSize.xxl },
   list: { padding: Spacing.xl, paddingTop: 0 },
 });

@@ -5,6 +5,7 @@ import { useAuthStore } from '../../store/slices/authSlice';
 import { FontFamily, FontSize, Spacing } from '../../constants/theme';
 import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
+import FrameSeekIcon from '../../components/common/FrameSeekIcon';
 import type { RegisterScreenProps } from '../../types/navigation.types';
 
 export default function RegisterScreen({ navigation }: RegisterScreenProps) {
@@ -44,6 +45,7 @@ export default function RegisterScreen({ navigation }: RegisterScreenProps) {
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.header}>
+          <FrameSeekIcon size={40} />
           <Text style={[styles.title, { color: colors.text }]}>Create Account</Text>
           <Text style={[styles.subtitle, { color: colors.textMid }]}>Join FrameSeek and start searching your videos</Text>
         </View>
@@ -75,6 +77,7 @@ const styles = StyleSheet.create({
   },
   header: {
     marginBottom: Spacing.xxl,
+    gap: Spacing.sm,
   },
   title: {
     fontFamily: FontFamily.bold,

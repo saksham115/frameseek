@@ -9,12 +9,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.repositories.vector_db import vector_db
 from app.repositories.video_repo import VideoRepository
+from app.services.storage_service import StorageService
 from app.utils.video_metadata import extract_metadata
 
 
 class VideoService:
     def __init__(self, db: AsyncSession):
         self.repo = VideoRepository(db)
+        self.storage_service = StorageService(db)
 
     async def upload_video(self, file: UploadFile, user_id: UUID, title: str | None = None, folder_id: UUID | None = None, local_uri: str | None = None, thumbnail_uri: str | None = None) -> dict:
         filename = file.filename or "unknown.mp4"
@@ -28,6 +30,11 @@ class VideoService:
         max_size = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
         if file_size > max_size:
             raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="File too large")
+
+        # Check storage quota
+        quota = await self.storage_service.get_quota(user_id)
+        if quota["used_bytes"] + file_size > quota["limit_bytes"]:
+            raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="Storage limit exceeded. Please delete some videos or upgrade your plan.")
 
         # Create video record first to get ID
         video = await self.repo.create(
@@ -65,6 +72,9 @@ class VideoService:
             codec=metadata.codec,
         )
 
+        # Update storage usage
+        await self.storage_service.update_storage_used(user_id, file_size)
+
         return video
 
     async def get_video(self, video_id: UUID, user_id: UUID):
@@ -98,6 +108,9 @@ class VideoService:
         frames_dir = Path(settings.STORAGE_BASE_PATH) / "frames" / str(video_id)
         if frames_dir.exists():
             shutil.rmtree(frames_dir, ignore_errors=True)
+
+        # Update storage usage (subtract file size)
+        await self.storage_service.update_storage_used(user_id, -(video.file_size_bytes or 0))
 
         # Hard-delete video record
         await self.repo.delete(video)

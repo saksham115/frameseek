@@ -50,6 +50,14 @@ class AuthService:
 
         return self._generate_tokens(user)
 
+    async def accept_tos(self, user_id) -> UserResponse:
+        user = await self.repo.get_by_id(user_id)
+        if not user:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        if not user.tos_accepted_at:
+            await self.repo.update(user, tos_accepted_at=datetime.now(timezone.utc))
+        return UserResponse.model_validate(user)
+
     def _generate_tokens(self, user) -> Tokens:
         token_data = {"sub": str(user.user_id), "email": user.email, "name": user.name, "plan": user.plan_type}
         access_token = create_access_token(token_data)

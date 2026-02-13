@@ -13,6 +13,7 @@ class StorageService:
         user = await self.user_repo.get_by_id(user_id)
         if not user:
             return {"used_bytes": 0, "limit_bytes": 0, "used_percentage": 0}
+
         used = user.storage_used_bytes or 0
         limit = user.storage_limit_bytes or 5368709120
         percentage = round((used / limit) * 100, 2) if limit > 0 else 0

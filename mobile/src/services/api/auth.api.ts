@@ -1,4 +1,4 @@
-import type { ApiResponse, AuthData } from '../../types/api.types';
+import type { ApiResponse, AuthData, UserData } from '../../types/api.types';
 import apiClient from './client';
 
 export const authApi = {
@@ -12,6 +12,12 @@ export const authApi = {
     apiClient.post<ApiResponse<AuthData['tokens']>>('/auth/refresh', {
       refresh_token: refreshToken,
     }),
+
+  getMe: () =>
+    apiClient.get<ApiResponse<UserData>>('/auth/me'),
+
+  acceptTos: () =>
+    apiClient.post<ApiResponse<UserData>>('/auth/accept-tos', { accepted: true }),
 
   logout: (refreshToken: string) =>
     apiClient.post('/auth/logout', { refresh_token: refreshToken }),

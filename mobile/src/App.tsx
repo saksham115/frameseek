@@ -1,25 +1,39 @@
-import React, { useEffect } from 'react';
-import { StatusBar, ActivityIndicator, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { StatusBar, ActivityIndicator, View, Alert } from 'react-native';
 import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
 import { useFonts, PlusJakartaSans_400Regular, PlusJakartaSans_500Medium, PlusJakartaSans_600SemiBold, PlusJakartaSans_700Bold } from '@expo-google-fonts/plus-jakarta-sans';
 import { JetBrainsMono_400Regular } from '@expo-google-fonts/jetbrains-mono';
 import * as SplashScreen from 'expo-splash-screen';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { ThemeProvider } from './providers/ThemeProvider';
 import { useTheme } from './hooks/useTheme';
 import { useAuthStore } from './store/slices/authSlice';
 import AuthNavigator from './navigation/AuthNavigator';
 import AppNavigator from './navigation/AppNavigator';
+import TosAcceptanceModal from './components/legal/TosAcceptanceModal';
 
 SplashScreen.preventAutoHideAsync();
 
 function RootNavigator() {
   const { colors, isDark } = useTheme();
-  const { isAuthenticated, isLoading, restoreSession } = useAuthStore();
+  const { isAuthenticated, isLoading, restoreSession, tosAccepted, acceptTos } = useAuthStore();
+  const [tosLoading, setTosLoading] = useState(false);
 
   useEffect(() => {
     restoreSession();
   }, []);
+
+  const handleAcceptTos = async () => {
+    setTosLoading(true);
+    try {
+      await acceptTos();
+    } catch {
+      Alert.alert('Error', 'Failed to accept terms. Please try again.');
+    } finally {
+      setTosLoading(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -45,6 +59,11 @@ function RootNavigator() {
     <NavigationContainer theme={navTheme}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
       {isAuthenticated ? <AppNavigator /> : <AuthNavigator />}
+      <TosAcceptanceModal
+        visible={isAuthenticated && !tosAccepted}
+        onAccept={handleAcceptTos}
+        loading={tosLoading}
+      />
     </NavigationContainer>
   );
 }
@@ -67,8 +86,10 @@ export default function App() {
   if (!fontsLoaded) return null;
 
   return (
-    <ThemeProvider>
-      <RootNavigator />
-    </ThemeProvider>
+    <SafeAreaProvider>
+      <ThemeProvider>
+        <RootNavigator />
+      </ThemeProvider>
+    </SafeAreaProvider>
   );
 }

@@ -1,3 +1,4 @@
+from datetime import datetime
 from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field
@@ -35,8 +36,13 @@ class UserResponse(BaseModel):
     plan_type: str = "free"
     storage_used_bytes: int = 0
     storage_limit_bytes: int = 5368709120
+    tos_accepted_at: datetime | None = None
 
     model_config = {"from_attributes": True}
+
+
+class AcceptTosRequest(BaseModel):
+    accepted: bool = True
 
 
 class AuthResponse(BaseModel):
