@@ -9,8 +9,7 @@ interface AuthState {
   isLoading: boolean;
   tosAccepted: boolean;
 
-  login: (email: string, password: string) => Promise<void>;
-  register: (name: string, email: string, password: string) => Promise<void>;
+  googleSignIn: (idToken: string, name?: string) => Promise<void>;
   logout: () => Promise<void>;
   restoreSession: () => Promise<void>;
   setUser: (user: UserData) => void;
@@ -23,8 +22,8 @@ export const useAuthStore = create<AuthState>((set) => ({
   isLoading: true,
   tosAccepted: false,
 
-  login: async (email, password) => {
-    const response = await authApi.login({ email, password });
+  googleSignIn: async (idToken, name) => {
+    const response = await authApi.googleSignIn(idToken, name);
     const { user, tokens } = response.data.data;
     await SecureStore.setItemAsync('access_token', tokens.access_token);
     await SecureStore.setItemAsync('refresh_token', tokens.refresh_token);
@@ -35,15 +34,6 @@ export const useAuthStore = create<AuthState>((set) => ({
       await SecureStore.deleteItemAsync('tos_accepted');
     }
     set({ user, isAuthenticated: true, tosAccepted });
-  },
-
-  register: async (name, email, password) => {
-    const response = await authApi.register({ email, password, name });
-    const { user, tokens } = response.data.data;
-    await SecureStore.setItemAsync('access_token', tokens.access_token);
-    await SecureStore.setItemAsync('refresh_token', tokens.refresh_token);
-    await SecureStore.deleteItemAsync('tos_accepted');
-    set({ user, isAuthenticated: true, tosAccepted: false });
   },
 
   logout: async () => {

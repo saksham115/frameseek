@@ -1,8 +1,6 @@
 export const Routes = {
   // Auth
   Login: 'Login',
-  Register: 'Register',
-  ForgotPassword: 'ForgotPassword',
 
   // Main tabs
   Dashboard: 'Dashboard',

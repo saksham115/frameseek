@@ -2,11 +2,8 @@ import type { ApiResponse, AuthData, UserData } from '../../types/api.types';
 import apiClient from './client';
 
 export const authApi = {
-  register: (data: { email: string; password: string; name: string }) =>
-    apiClient.post<ApiResponse<AuthData>>('/auth/register', data),
-
-  login: (data: { email: string; password: string }) =>
-    apiClient.post<ApiResponse<AuthData>>('/auth/login', data),
+  googleSignIn: (idToken: string, name?: string) =>
+    apiClient.post<ApiResponse<AuthData>>('/auth/google', { id_token: idToken, name }),
 
   refresh: (refreshToken: string) =>
     apiClient.post<ApiResponse<AuthData['tokens']>>('/auth/refresh', {

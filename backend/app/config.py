@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     GCP_LOCATION: str = "us-central1"
     GCP_SERVICE_ACCOUNT_PATH: str = ""
 
+    # Google OAuth
+    GOOGLE_CLIENT_ID: str = ""
+    GOOGLE_IOS_CLIENT_ID: str = ""
+
     # Storage
     STORAGE_BASE_PATH: str = "./storage"
     MAX_UPLOAD_SIZE_MB: int = 500

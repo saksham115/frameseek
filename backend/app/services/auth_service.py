@@ -1,41 +1,76 @@
 from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
+from google.auth.transport import requests as google_requests
+from google.oauth2 import id_token as google_id_token
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.repositories.user_repo import UserRepository
-from app.schemas.auth import AuthResponse, LoginRequest, RegisterRequest, Tokens, UserResponse
-from app.utils.security import create_access_token, create_refresh_token, decode_token, hash_password, verify_password
+from app.schemas.auth import AuthResponse, Tokens, UserResponse
+from app.utils.security import create_access_token, create_refresh_token, decode_token
 
 
 class AuthService:
     def __init__(self, db: AsyncSession):
         self.repo = UserRepository(db)
 
-    async def register(self, data: RegisterRequest) -> AuthResponse:
-        existing = await self.repo.get_by_email(data.email)
-        if existing:
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
+    async def google_sign_in(self, token: str, name: str | None = None) -> AuthResponse:
+        # Verify the Google ID token
+        try:
+            payload = google_id_token.verify_oauth2_token(
+                token,
+                google_requests.Request(),
+                audience=settings.GOOGLE_CLIENT_ID,
+            )
+        except ValueError:
+            # Try iOS client ID as audience
+            try:
+                payload = google_id_token.verify_oauth2_token(
+                    token,
+                    google_requests.Request(),
+                    audience=settings.GOOGLE_IOS_CLIENT_ID,
+                )
+            except ValueError:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid Google ID token",
+                )
 
+        google_id = payload["sub"]
+        email = payload.get("email")
+        google_name = payload.get("name") or name or "User"
+
+        if not email:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Google account has no email address",
+            )
+
+        # 1. Look up by google_id (returning user)
+        user = await self.repo.get_by_google_id(google_id)
+        if user:
+            await self.repo.update(user, last_login_at=datetime.now(timezone.utc))
+            tokens = self._generate_tokens(user)
+            return AuthResponse(user=UserResponse.model_validate(user), tokens=tokens)
+
+        # 2. Look up by email (link existing account)
+        user = await self.repo.get_by_email(email)
+        if user:
+            await self.repo.update(
+                user,
+                google_id=google_id,
+                last_login_at=datetime.now(timezone.utc),
+            )
+            tokens = self._generate_tokens(user)
+            return AuthResponse(user=UserResponse.model_validate(user), tokens=tokens)
+
+        # 3. Create new user
         user = await self.repo.create(
-            email=data.email,
-            name=data.name,
-            password_hash=hash_password(data.password),
+            email=email,
+            name=google_name,
+            google_id=google_id,
         )
-
-        tokens = self._generate_tokens(user)
-        return AuthResponse(user=UserResponse.model_validate(user), tokens=tokens)
-
-    async def login(self, data: LoginRequest) -> AuthResponse:
-        user = await self.repo.get_by_email(data.email)
-        if not user or not user.password_hash:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
-
-        if not verify_password(data.password, user.password_hash):
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
-
-        await self.repo.update(user, last_login_at=datetime.now(timezone.utc))
         tokens = self._generate_tokens(user)
         return AuthResponse(user=UserResponse.model_validate(user), tokens=tokens)
 

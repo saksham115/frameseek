@@ -1,86 +1,91 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, TouchableOpacity } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { GoogleSignin, isErrorWithCode, statusCodes } from '@react-native-google-signin/google-signin';
+import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../hooks/useTheme';
 import { useAuthStore } from '../../store/slices/authSlice';
-import { FontFamily, FontSize, Spacing } from '../../constants/theme';
-import Button from '../../components/common/Button';
-import Input from '../../components/common/Input';
+import { FontFamily, FontSize, Spacing, BorderRadius } from '../../constants/theme';
+import { GOOGLE_WEB_CLIENT_ID, GOOGLE_IOS_CLIENT_ID } from '../../constants/config';
 import FrameSeekIcon from '../../components/common/FrameSeekIcon';
-import type { LoginScreenProps } from '../../types/navigation.types';
 
-export default function LoginScreen({ navigation }: LoginScreenProps) {
+export default function LoginScreen() {
   const { colors } = useTheme();
-  const login = useAuthStore((s) => s.login);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const googleSignIn = useAuthStore((s) => s.googleSignIn);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
 
-  const handleLogin = async () => {
-    setError('');
+  useEffect(() => {
+    GoogleSignin.configure({
+      webClientId: GOOGLE_WEB_CLIENT_ID,
+      iosClientId: GOOGLE_IOS_CLIENT_ID,
+    });
+  }, []);
+
+  const handleGoogleSignIn = async () => {
     setLoading(true);
     try {
-      await login(email, password);
+      await GoogleSignin.hasPlayServices();
+      const response = await GoogleSignin.signIn();
+      const idToken = response.data?.idToken;
+
+      if (!idToken) {
+        Alert.alert('Sign-In Error', 'No ID token received from Google.');
+        return;
+      }
+
+      const name = response.data?.user?.name ?? undefined;
+      await googleSignIn(idToken, name);
     } catch (err: any) {
-      setError(err.response?.data?.error?.message || err.response?.data?.detail || 'Login failed');
+      if (isErrorWithCode(err)) {
+        if (err.code === statusCodes.SIGN_IN_CANCELLED) {
+          // User cancelled — do nothing
+          return;
+        }
+        if (err.code === statusCodes.IN_PROGRESS) {
+          return;
+        }
+      }
+      const message =
+        err?.response?.data?.error?.message ||
+        err?.response?.data?.detail ||
+        err?.message ||
+        'Sign in failed. Please try again.';
+      Alert.alert('Sign-In Error', message);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-      <ScrollView
-        contentContainerStyle={[styles.container, { backgroundColor: colors.background }]}
-        keyboardShouldPersistTaps="handled"
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <View style={styles.header}>
+        <FrameSeekIcon size={56} />
+        <Text style={styles.logo}>
+          <Text style={{ color: colors.text }}>Frame</Text>
+          <Text style={{ color: colors.amber }}>Seek</Text>
+        </Text>
+        <Text style={[styles.subtitle, { color: colors.textMid }]}>
+          Find any moment in your videos
+        </Text>
+      </View>
+
+      <TouchableOpacity
+        style={[styles.googleButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
+        onPress={handleGoogleSignIn}
+        disabled={loading}
+        activeOpacity={0.7}
       >
-        <View style={styles.header}>
-          <FrameSeekIcon size={56} />
-          <Text style={[styles.logo]}>
-            <Text style={{ color: colors.text }}>Frame</Text>
-            <Text style={{ color: colors.amber }}>Seek</Text>
-          </Text>
-          <Text style={[styles.subtitle, { color: colors.textMid }]}>Find any moment in your videos</Text>
-        </View>
-
-        <View style={styles.form}>
-          <Input
-            label="Email"
-            placeholder="you@example.com"
-            value={email}
-            onChangeText={setEmail}
-            autoCapitalize="none"
-            keyboardType="email-address"
-            autoComplete="email"
-          />
-          <Input
-            label="Password"
-            placeholder="Enter your password"
-            value={password}
-            onChangeText={setPassword}
-            isPassword
-            autoComplete="password"
-          />
-          {error ? <Text style={[styles.error, { color: colors.error }]}>{error}</Text> : null}
-          <Button title="Sign In" onPress={handleLogin} loading={loading} disabled={!email || !password} />
-        </View>
-
-        <View style={styles.footer}>
-          <TouchableOpacity onPress={() => navigation.navigate('ForgotPassword')}>
-            <Text style={[styles.link, { color: colors.textMid }]}>Forgot password?</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => navigation.navigate('Register')}>
-            <Text style={[styles.link, { color: colors.amber }]}>Create Account</Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+        <Ionicons name="logo-google" size={20} color={colors.text} />
+        <Text style={[styles.googleButtonText, { color: colors.text }]}>
+          {loading ? 'Signing in…' : 'Sign in with Google'}
+        </Text>
+      </TouchableOpacity>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flexGrow: 1,
+    flex: 1,
     justifyContent: 'center',
     padding: Spacing.xl,
   },
@@ -98,22 +103,17 @@ const styles = StyleSheet.create({
     fontSize: FontSize.md,
     marginTop: Spacing.sm,
   },
-  form: {
-    marginBottom: Spacing.xl,
-  },
-  error: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.sm,
-    marginBottom: Spacing.md,
-    textAlign: 'center',
-  },
-  footer: {
+  googleButton: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: Spacing.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.md,
+    paddingVertical: Spacing.lg,
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1,
   },
-  link: {
-    fontFamily: FontFamily.medium,
-    fontSize: FontSize.sm,
+  googleButtonText: {
+    fontFamily: FontFamily.semiBold,
+    fontSize: FontSize.md,
   },
 });

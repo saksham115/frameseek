@@ -3,8 +3,6 @@ import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 
 export type AuthStackParamList = {
   Login: undefined;
-  Register: undefined;
-  ForgotPassword: undefined;
 };
 
 export type MainTabParamList = {
@@ -28,8 +26,6 @@ export type RootStackParamList = {
 
 // Screen props
 export type LoginScreenProps = NativeStackScreenProps<AuthStackParamList, 'Login'>;
-export type RegisterScreenProps = NativeStackScreenProps<AuthStackParamList, 'Register'>;
-export type ForgotPasswordScreenProps = NativeStackScreenProps<AuthStackParamList, 'ForgotPassword'>;
 export type DashboardScreenProps = BottomTabScreenProps<MainTabParamList, 'Dashboard'>;
 export type SearchScreenProps = BottomTabScreenProps<MainTabParamList, 'Search'>;
 export type VideosScreenProps = BottomTabScreenProps<MainTabParamList, 'Videos'>;

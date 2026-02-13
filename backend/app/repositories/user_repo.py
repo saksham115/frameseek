@@ -18,6 +18,10 @@ class UserRepository:
         result = await self.db.execute(select(User).where(User.email == email, User.deleted_at.is_(None)))
         return result.scalar_one_or_none()
 
+    async def get_by_google_id(self, google_id: str) -> User | None:
+        result = await self.db.execute(select(User).where(User.google_id == google_id, User.deleted_at.is_(None)))
+        return result.scalar_one_or_none()
+
     async def create(self, **kwargs) -> User:
         user = User(**kwargs)
         self.db.add(user)

@@ -4,24 +4,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.user import User
-from app.schemas.auth import AcceptTosRequest, AuthResponse, LoginRequest, LogoutRequest, RefreshRequest, RegisterRequest, Tokens, UserResponse
+from app.schemas.auth import AcceptTosRequest, AuthResponse, GoogleSignInRequest, LogoutRequest, RefreshRequest, Tokens, UserResponse
 from app.schemas.common import ApiResponse
 from app.services.auth_service import AuthService
 
 router = APIRouter()
 
 
-@router.post("/register", response_model=ApiResponse[AuthResponse])
-async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
+@router.post("/google", response_model=ApiResponse[AuthResponse])
+async def google_sign_in(data: GoogleSignInRequest, db: AsyncSession = Depends(get_db)):
     service = AuthService(db)
-    result = await service.register(data)
-    return ApiResponse(data=result)
-
-
-@router.post("/login", response_model=ApiResponse[AuthResponse])
-async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
-    service = AuthService(db)
-    result = await service.login(data)
+    result = await service.google_sign_in(data.id_token, data.name)
     return ApiResponse(data=result)
 
 
