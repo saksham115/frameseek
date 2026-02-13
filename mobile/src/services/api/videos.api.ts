@@ -26,6 +26,12 @@ export const videosApi = {
       timeout: 300000, // 5 min for uploads
     }),
 
+  update: (videoId: string, data: { title?: string; description?: string }) =>
+    apiClient.patch<ApiResponse<{ video: VideoData; frames_count: number; job: any }>>(
+      `/videos/${videoId}`,
+      data
+    ),
+
   delete: (videoId: string) => apiClient.delete(`/videos/${videoId}`),
 
   process: (videoId: string, data?: { frame_interval?: number; priority?: number }) =>

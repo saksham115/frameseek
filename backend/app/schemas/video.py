@@ -56,6 +56,11 @@ class VideoDetailResponse(BaseModel):
     job: "JobBriefResponse | None" = None
 
 
+class VideoUpdateRequest(BaseModel):
+    title: str | None = Field(None, min_length=1, max_length=500)
+    description: str | None = None
+
+
 class ProcessRequest(BaseModel):
     frame_interval: float = Field(default=2.0, ge=0.5, le=30.0)
     priority: int = Field(default=5, ge=1, le=10)

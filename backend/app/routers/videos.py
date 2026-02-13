@@ -15,6 +15,7 @@ from app.schemas.video import (
     VideoDetailResponse,
     VideoListResponse,
     VideoResponse,
+    VideoUpdateRequest,
     VideoUploadResponse,
 )
 from app.services.job_service import JobService
@@ -95,6 +96,27 @@ async def get_video(
         video=VideoResponse.model_validate(video),
         frames_count=frames_count,
         job=job_brief,
+    ))
+
+
+@router.patch("/{video_id}", response_model=ApiResponse[VideoDetailResponse])
+async def update_video(
+    video_id: UUID,
+    data: VideoUpdateRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    service = VideoService(db)
+    video = await service.get_video(video_id, user.user_id)
+
+    update_fields = data.model_dump(exclude_unset=True)
+    if update_fields:
+        await service.repo.update(video, **update_fields)
+
+    frames_count = await service.get_frame_count(video_id)
+    return ApiResponse(data=VideoDetailResponse(
+        video=VideoResponse.model_validate(video),
+        frames_count=frames_count,
     ))
 
 

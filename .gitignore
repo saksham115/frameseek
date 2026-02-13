@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.env
+
+# Secrets
+service-account.json
+*.pem
+*.key
+
+# Storage - uploaded videos, extracted frames, thumbnails
+backend/storage/videos/
+backend/storage/frames/
+backend/storage/thumbnails/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+
+# Node
+node_modules/
+
+# Expo
+mobile/.expo/

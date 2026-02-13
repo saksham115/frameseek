@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Alert, Image, TouchableOpacity, Keyboard } from 'react-native';
+import { View, Text, TextInput, StyleSheet, ScrollView, Alert, Image, TouchableOpacity, Keyboard } from 'react-native';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../hooks/useTheme';
@@ -28,7 +28,11 @@ export default function VideoDetailScreen({ route, navigation }: VideoDetailScre
   const [searching, setSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(!!(incomingResults && incomingResults.length > 0));
   const [selectedFrameId, setSelectedFrameId] = useState<string | null>(null);
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [editTitle, setEditTitle] = useState('');
+  const [savingTitle, setSavingTitle] = useState(false);
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const titleInputRef = useRef<TextInput>(null);
   const videoRef = useRef<Video>(null);
   const scrollRef = useRef<ScrollView>(null);
   const videoPlayerY = useRef(0);
@@ -135,6 +139,32 @@ export default function VideoDetailScreen({ route, navigation }: VideoDetailScre
     ]);
   };
 
+  const handleTitleTap = () => {
+    if (video) {
+      setEditTitle(video.title);
+      setIsEditingTitle(true);
+      setTimeout(() => titleInputRef.current?.focus(), 50);
+    }
+  };
+
+  const handleTitleSave = async () => {
+    const trimmed = editTitle.trim();
+    if (!trimmed || !video || trimmed === video.title) {
+      setIsEditingTitle(false);
+      return;
+    }
+    setSavingTitle(true);
+    try {
+      const res = await videosApi.update(videoId, { title: trimmed });
+      setVideo(res.data.data.video);
+    } catch (err: any) {
+      Alert.alert('Error', err.response?.data?.detail || 'Failed to update title');
+    } finally {
+      setSavingTitle(false);
+      setIsEditingTitle(false);
+    }
+  };
+
   if (loading) return <LoadingSpinner />;
   if (!video) return <EmptyState icon="alert-circle" title="Not found" message="Video not found" />;
 
@@ -184,9 +214,24 @@ export default function VideoDetailScreen({ route, navigation }: VideoDetailScre
       {/* Info */}
       <View style={styles.info}>
         <View style={styles.titleRow}>
-          <Text style={[styles.title, { color: colors.text, flex: 1 }]}>{video.title}</Text>
-          <TouchableOpacity onPress={handleDelete} style={styles.deleteIcon} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-            <Ionicons name="trash-outline" size={16} color={colors.textDim} />
+          {isEditingTitle ? (
+            <TextInput
+              ref={titleInputRef}
+              value={editTitle}
+              onChangeText={setEditTitle}
+              onBlur={handleTitleSave}
+              onSubmitEditing={handleTitleSave}
+              style={[styles.titleInput, { color: colors.text, borderColor: colors.amber, flex: 1 }]}
+              returnKeyType="done"
+              maxLength={500}
+              autoFocus
+              editable={!savingTitle}
+            />
+          ) : (
+            <Text style={[styles.title, { color: colors.text, flex: 1 }]}>{video.title}</Text>
+          )}
+          <TouchableOpacity onPress={handleDelete} style={styles.iconBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            <Ionicons name="trash-outline" size={16} color={colors.textMid} />
           </TouchableOpacity>
         </View>
         <View style={styles.metaRow}>
@@ -196,6 +241,11 @@ export default function VideoDetailScreen({ route, navigation }: VideoDetailScre
             <Text style={[styles.meta, { color: colors.textMid }]}>{video.width}x{video.height}</Text>
           )}
           <Text style={[styles.meta, { color: colors.textMid }]}>{formatTimeAgo(video.created_at)}</Text>
+          {!isEditingTitle && (
+            <TouchableOpacity onPress={handleTitleTap} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Ionicons name="pencil-outline" size={13} color={colors.textMid} />
+            </TouchableOpacity>
+          )}
         </View>
         {video.codec && (
           <Text style={[styles.codec, { color: colors.textDim }]}>Codec: {video.codec} | FPS: {Math.round(video.fps ?? 0)}</Text>
@@ -297,7 +347,14 @@ const styles = StyleSheet.create({
   info: { padding: Spacing.xl, gap: Spacing.sm },
   titleRow: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.sm },
   title: { fontFamily: FontFamily.bold, fontSize: FontSize.xl },
-  deleteIcon: { paddingTop: 4, opacity: 0.5 },
+  titleInput: {
+    fontFamily: FontFamily.bold,
+    fontSize: FontSize.xl,
+    borderBottomWidth: 1.5,
+    paddingVertical: 2,
+    paddingHorizontal: 0,
+  },
+  iconBtn: { paddingTop: 4 },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, flexWrap: 'wrap' },
   meta: { fontFamily: FontFamily.regular, fontSize: FontSize.xs },
   codec: { fontFamily: FontFamily.mono, fontSize: FontSize.xs },
