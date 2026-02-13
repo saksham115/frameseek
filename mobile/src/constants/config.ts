@@ -1,9 +1,13 @@
+import { Platform } from 'react-native';
+
+const DEV_HOST = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
+
 export const API_BASE_URL = __DEV__
-  ? 'http://localhost:8000/api/v1'
+  ? `http://${DEV_HOST}:8000/api/v1`
   : 'https://api.frameseek.com/api/v1';
 
 export const STORAGE_BASE_URL = __DEV__
-  ? 'http://localhost:8000/storage'
+  ? `http://${DEV_HOST}:8000/storage`
   : 'https://api.frameseek.com/storage';
 
 export const SEARCH_DEBOUNCE_MS = 600;

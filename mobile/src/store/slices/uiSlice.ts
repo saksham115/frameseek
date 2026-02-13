@@ -10,7 +10,7 @@ interface UIState {
 export const useUIStore = create<UIState>()(
   persist(
     (set) => ({
-      themePreference: 'system',
+      themePreference: 'dark',
       setThemePreference: (pref) => set({ themePreference: pref }),
     }),
     {

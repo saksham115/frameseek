@@ -16,26 +16,32 @@ class AuthService:
         self.repo = UserRepository(db)
 
     async def google_sign_in(self, token: str, name: str | None = None) -> AuthResponse:
-        # Verify the Google ID token
-        try:
-            payload = google_id_token.verify_oauth2_token(
-                token,
-                google_requests.Request(),
-                audience=settings.GOOGLE_CLIENT_ID,
-            )
-        except ValueError:
-            # Try iOS client ID as audience
+        # Verify the Google ID token against all valid audiences
+        payload = None
+        audiences = [settings.GOOGLE_CLIENT_ID, settings.GOOGLE_IOS_CLIENT_ID]
+        last_error = None
+
+        for audience in audiences:
+            if not audience:
+                continue
             try:
                 payload = google_id_token.verify_oauth2_token(
                     token,
                     google_requests.Request(),
-                    audience=settings.GOOGLE_IOS_CLIENT_ID,
+                    audience=audience,
                 )
-            except ValueError:
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Invalid Google ID token",
-                )
+                break
+            except ValueError as e:
+                last_error = e
+                continue
+
+        if payload is None:
+            import logging
+            logging.error(f"Google token verification failed: {last_error}")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=f"Invalid Google ID token: {last_error}",
+            )
 
         google_id = payload["sub"]
         email = payload.get("email")

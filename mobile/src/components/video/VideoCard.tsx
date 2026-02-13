@@ -4,7 +4,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../hooks/useTheme';
 import { BorderRadius, FontFamily, FontSize, Spacing } from '../../constants/theme';
 import Badge from '../common/Badge';
-import ProgressBar from '../common/ProgressBar';
 import { formatDuration, formatFileSize, formatTimeAgo } from '../../utils/formatting';
 import type { VideoData } from '../../types/api.types';
 
@@ -46,9 +45,6 @@ export default function VideoCard({ video, onPress, onDelete }: VideoCardProps) 
         <View style={styles.statusRow}>
           <Badge label={video.status} variant={statusVariant} />
         </View>
-        {(video.status === 'processing' || video.status === 'queued') && (
-          <ProgressBar progress={video.processing_progress} />
-        )}
       </View>
       {onDelete && (
         <TouchableOpacity onPress={onDelete} style={styles.deleteButton} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>

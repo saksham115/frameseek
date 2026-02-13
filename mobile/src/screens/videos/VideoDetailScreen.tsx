@@ -8,7 +8,6 @@ import { videosApi, searchApi } from '../../services/api';
 import { STORAGE_BASE_URL } from '../../constants/config';
 import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
-import ProgressBar from '../../components/common/ProgressBar';
 import SearchBar from '../../components/search/SearchBar';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import EmptyState from '../../components/common/EmptyState';
@@ -252,14 +251,6 @@ export default function VideoDetailScreen({ route, navigation }: VideoDetailScre
         )}
       </View>
 
-      {/* Progress for processing videos */}
-      {(video.status === 'processing' || video.status === 'queued') && (
-        <View style={styles.progressSection}>
-          <ProgressBar progress={video.processing_progress} />
-          <Text style={[styles.progressText, { color: colors.textMid }]}>{video.processing_progress}% complete</Text>
-        </View>
-      )}
-
       {/* Actions */}
       {video.status === 'uploaded' && (
         <View style={styles.actions}>
@@ -358,8 +349,6 @@ const styles = StyleSheet.create({
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, flexWrap: 'wrap' },
   meta: { fontFamily: FontFamily.regular, fontSize: FontSize.xs },
   codec: { fontFamily: FontFamily.mono, fontSize: FontSize.xs },
-  progressSection: { paddingHorizontal: Spacing.xl, gap: Spacing.xs },
-  progressText: { fontFamily: FontFamily.regular, fontSize: FontSize.xs, textAlign: 'center' },
   searchSection: { paddingHorizontal: Spacing.xl, paddingTop: Spacing.lg, paddingBottom: Spacing.sm },
   resultsSection: { paddingHorizontal: Spacing.xl, gap: Spacing.md },
   searchLoading: { height: 60, justifyContent: 'center' },
