@@ -109,7 +109,10 @@ export default function VideoDetailScreen({ route, navigation }: VideoDetailScre
     // Seek to the timestamp and play
     if (videoRef.current) {
       try {
-        await videoRef.current.setPositionAsync(result.timestamp_seconds * 1000);
+        await videoRef.current.setPositionAsync(result.timestamp_seconds * 1000, {
+          toleranceMillisBefore: 0,
+          toleranceMillisAfter: 0,
+        });
         await videoRef.current.playAsync();
       } catch {}
     }
