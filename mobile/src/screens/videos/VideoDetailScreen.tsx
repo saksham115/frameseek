@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, TextInput, StyleSheet, ScrollView, Alert, Image, TouchableOpacity, Keyboard } from 'react-native';
+import { View, Text, TextInput, StyleSheet, ScrollView, Alert, Image, TouchableOpacity, Keyboard, ActionSheetIOS, Platform } from 'react-native';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../hooks/useTheme';
 import { FontFamily, FontSize, Spacing, BorderRadius } from '../../constants/theme';
-import { videosApi, searchApi } from '../../services/api';
+import { videosApi, searchApi, clipsApi } from '../../services/api';
 import { STORAGE_BASE_URL } from '../../constants/config';
 import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
@@ -14,7 +14,7 @@ import EmptyState from '../../components/common/EmptyState';
 import { formatDuration, formatFileSize, formatTimeAgo } from '../../utils/formatting';
 import { useFocusEffect } from '@react-navigation/native';
 import type { VideoDetailScreenProps } from '../../types/navigation.types';
-import type { SearchResultData, VideoData } from '../../types/api.types';
+import type { ClipData, SearchResultData, VideoData } from '../../types/api.types';
 
 export default function VideoDetailScreen({ route, navigation }: VideoDetailScreenProps) {
   const { videoId, searchQuery: incomingQuery, searchResults: incomingResults } = route.params;
@@ -30,6 +30,7 @@ export default function VideoDetailScreen({ route, navigation }: VideoDetailScre
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editTitle, setEditTitle] = useState('');
   const [savingTitle, setSavingTitle] = useState(false);
+  const [clips, setClips] = useState<ClipData[]>([]);
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const titleInputRef = useRef<TextInput>(null);
   const videoRef = useRef<Video>(null);
@@ -38,8 +39,12 @@ export default function VideoDetailScreen({ route, navigation }: VideoDetailScre
 
   const loadData = useCallback(async () => {
     try {
-      const res = await videosApi.get(videoId);
-      setVideo(res.data.data.video);
+      const [videoRes, clipsRes] = await Promise.all([
+        videosApi.get(videoId),
+        clipsApi.list({ video_id: videoId, limit: 50 }),
+      ]);
+      setVideo(videoRes.data.data.video);
+      setClips(clipsRes.data.data.clips);
     } catch {} finally {
       setLoading(false);
     }
@@ -107,6 +112,37 @@ export default function VideoDetailScreen({ route, navigation }: VideoDetailScre
         await videoRef.current.setPositionAsync(result.timestamp_seconds * 1000);
         await videoRef.current.playAsync();
       } catch {}
+    }
+  };
+
+  const getVideoUri = () => {
+    if (video?.video_url) return `${STORAGE_BASE_URL}${video.video_url.replace('/storage', '')}`;
+    if (video?.local_uri) return video.local_uri;
+    return '';
+  };
+
+  const handleGenerateClip = (result: SearchResultData) => {
+    const action = () => {
+      navigation.navigate('ClipGenerate', {
+        videoId,
+        timestamp: result.timestamp_seconds,
+        frameId: result.frame_id,
+        videoTitle: video?.title || 'Video',
+        videoDuration: video?.duration_seconds ?? 60,
+        videoUri: getVideoUri(),
+      });
+    };
+
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        { options: ['Cancel', 'Generate Clip'], cancelButtonIndex: 0 },
+        (index) => { if (index === 1) action(); },
+      );
+    } else {
+      Alert.alert('Actions', undefined, [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Generate Clip', onPress: action },
+      ]);
     }
   };
 
@@ -295,6 +331,13 @@ export default function VideoDetailScreen({ route, navigation }: VideoDetailScre
                         <Text style={styles.playingText}>Playing</Text>
                       </View>
                     )}
+                    <TouchableOpacity
+                      style={styles.moreBtn}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      onPress={() => handleGenerateClip(result)}
+                    >
+                      <Ionicons name="ellipsis-vertical" size={16} color="#fff" />
+                    </TouchableOpacity>
                     <Image
                       source={{ uri: `${STORAGE_BASE_URL}/frames/${(result.frame_url || '').replace('/storage/frames/', '')}` }}
                       style={styles.resultImage}
@@ -313,6 +356,38 @@ export default function VideoDetailScreen({ route, navigation }: VideoDetailScre
               })}
             </View>
           )}
+        </View>
+      )}
+
+      {/* Clips section */}
+      {!hasSearched && clips.length > 0 && (
+        <View style={styles.clipsSection}>
+          <Text style={[styles.clipsSectionTitle, { color: colors.text }]}>Clips</Text>
+          <View style={styles.clipsGrid}>
+            {clips.map((clip) => (
+              <TouchableOpacity
+                key={clip.clip_id}
+                activeOpacity={0.7}
+                onPress={() => navigation.navigate('ClipDetail', { clipId: clip.clip_id })}
+                style={[styles.clipCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
+              >
+                <View style={[styles.clipThumb, { backgroundColor: colors.surfaceRaised }]}>
+                  {clip.thumbnail_url ? (
+                    <Image source={{ uri: `${STORAGE_BASE_URL}${clip.thumbnail_url.replace('/storage', '')}` }} style={styles.clipThumbImage} resizeMode="cover" />
+                  ) : (
+                    <Ionicons name="film-outline" size={24} color={colors.amber} />
+                  )}
+                  <View style={styles.clipDuration}>
+                    <Text style={styles.clipDurationText}>{formatDuration(clip.duration_seconds)}</Text>
+                  </View>
+                </View>
+                <View style={styles.clipInfo}>
+                  <Text style={[styles.clipTitle, { color: colors.text }]} numberOfLines={2}>{clip.title}</Text>
+                  <Text style={[styles.clipMeta, { color: colors.textMid }]}>{formatTimeAgo(clip.created_at)}</Text>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
         </View>
       )}
 
@@ -391,4 +466,52 @@ const styles = StyleSheet.create({
   resultTime: { fontFamily: FontFamily.mono, fontSize: FontSize.xs },
   resultScore: { fontFamily: FontFamily.regular, fontSize: 10 },
   actions: { padding: Spacing.xl, gap: Spacing.sm },
+  moreBtn: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    zIndex: 2,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 12,
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  clipsSection: { paddingHorizontal: Spacing.xl, paddingTop: Spacing.lg, gap: Spacing.md },
+  clipsSectionTitle: { fontFamily: FontFamily.semiBold, fontSize: FontSize.lg },
+  clipsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
+  clipCard: {
+    width: '48%',
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  clipThumb: {
+    width: '100%',
+    height: 70,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  clipThumbImage: {
+    width: '100%',
+    height: '100%',
+  },
+  clipDuration: {
+    position: 'absolute',
+    bottom: 4,
+    right: 4,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    borderRadius: 4,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+  },
+  clipDurationText: {
+    color: '#fff',
+    fontFamily: FontFamily.mono,
+    fontSize: 10,
+  },
+  clipInfo: { padding: Spacing.xs, gap: 2 },
+  clipTitle: { fontFamily: FontFamily.semiBold, fontSize: FontSize.xs },
+  clipMeta: { fontFamily: FontFamily.regular, fontSize: 10 },
 });

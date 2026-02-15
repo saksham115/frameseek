@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
-from app.routers import auth, videos, search, jobs, folders, analytics, storage
+from app.routers import auth, videos, search, jobs, folders, analytics, storage, clips
 
 
 @asynccontextmanager
@@ -57,6 +57,7 @@ app.include_router(jobs.router, prefix="/api/v1/jobs", tags=["jobs"])
 app.include_router(folders.router, prefix="/api/v1/folders", tags=["folders"])
 app.include_router(analytics.router, prefix="/api/v1/analytics", tags=["analytics"])
 app.include_router(storage.router, prefix="/api/v1/storage", tags=["storage"])
+app.include_router(clips.router, prefix="/api/v1/clips", tags=["clips"])
 
 
 @app.get("/health")

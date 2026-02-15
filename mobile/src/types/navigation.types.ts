@@ -17,6 +17,8 @@ export type AppStackParamList = {
   VideoDetail: { videoId: string; searchQuery?: string; searchResults?: import('./api.types').SearchResultData[] };
   Upload: undefined;
   Profile: undefined;
+  ClipGenerate: { videoId: string; timestamp: number; frameId?: string; videoTitle: string; videoDuration: number; videoUri: string };
+  ClipDetail: { clipId: string };
 };
 
 export type RootStackParamList = {
@@ -33,3 +35,5 @@ export type SettingsScreenProps = BottomTabScreenProps<MainTabParamList, 'Settin
 export type VideoDetailScreenProps = NativeStackScreenProps<AppStackParamList, 'VideoDetail'>;
 export type UploadScreenProps = NativeStackScreenProps<AppStackParamList, 'Upload'>;
 export type ProfileScreenProps = NativeStackScreenProps<AppStackParamList, 'Profile'>;
+export type ClipGenerateScreenProps = NativeStackScreenProps<AppStackParamList, 'ClipGenerate'>;
+export type ClipDetailScreenProps = NativeStackScreenProps<AppStackParamList, 'ClipDetail'>;

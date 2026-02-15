@@ -65,3 +65,4 @@ class Video(Base):
     folder = relationship("Folder", back_populates="videos")
     frames = relationship("Frame", back_populates="video", cascade="all, delete-orphan")
     jobs = relationship("Job", back_populates="video", cascade="all, delete-orphan")
+    clips = relationship("Clip", back_populates="video", cascade="all, delete-orphan")

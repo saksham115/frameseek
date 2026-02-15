@@ -149,3 +149,21 @@ export interface SearchHistoryItem {
   results_count: number;
   created_at: string;
 }
+
+export interface ClipData {
+  clip_id: string;
+  user_id: string;
+  video_id: string;
+  title: string;
+  start_time: number;
+  end_time: number;
+  duration_seconds: number;
+  file_path: string | null;
+  file_size_bytes: number | null;
+  source_timestamp: number | null;
+  source_frame_id: string | null;
+  clip_url: string | null;
+  thumbnail_url: string | null;
+  video_title: string | null;
+  created_at: string;
+}

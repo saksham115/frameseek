@@ -13,7 +13,7 @@ import SearchBar from '../../components/search/SearchBar';
 import FAB from '../../components/common/FAB';
 import FrameSeekIcon from '../../components/common/FrameSeekIcon';
 import type { AppStackParamList } from '../../types/navigation.types';
-import type { VideoData } from '../../types/api.types';
+import type { ClipData, VideoData } from '../../types/api.types';
 import { formatDuration, formatTimeAgo } from '../../utils/formatting';
 
 export default function DashboardScreen() {
@@ -21,13 +21,18 @@ export default function DashboardScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
   const user = useAuthStore((s) => s.user);
   const [recentVideos, setRecentVideos] = useState<VideoData[]>([]);
+  const [recentClips, setRecentClips] = useState<ClipData[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
   const loadData = useCallback(async () => {
     try {
-      const videosRes = await apiClient.get('/videos', { params: { limit: 10 } });
+      const [videosRes, clipsRes] = await Promise.all([
+        apiClient.get('/videos', { params: { limit: 10 } }),
+        apiClient.get('/clips', { params: { limit: 10 } }),
+      ]);
       setRecentVideos(videosRes.data.data.videos);
+      setRecentClips(clipsRes.data.data.clips);
     } catch {}
   }, []);
 
@@ -87,6 +92,37 @@ export default function DashboardScreen() {
                   <View style={styles.carouselInfo}>
                     <Text style={[styles.carouselTitle, { color: colors.text }]} numberOfLines={2}>{item.title}</Text>
                     <Text style={[styles.carouselMeta, { color: colors.textMid }]}>{formatTimeAgo(item.created_at)}</Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
+        {recentClips.length > 0 && (
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Recent Clips</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carousel}>
+              {recentClips.map((clip) => (
+                <TouchableOpacity
+                  key={clip.clip_id}
+                  activeOpacity={0.7}
+                  onPress={() => navigation.navigate('ClipDetail', { clipId: clip.clip_id })}
+                  style={[styles.carouselCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                >
+                  <View style={[styles.carouselThumb, { backgroundColor: colors.surfaceRaised }]}>
+                    {clip.thumbnail_url ? (
+                      <Image source={{ uri: `${STORAGE_BASE_URL}${clip.thumbnail_url.replace('/storage', '')}` }} style={styles.carouselThumbImage} />
+                    ) : (
+                      <Ionicons name="film-outline" size={28} color={colors.amber} />
+                    )}
+                    <View style={styles.carouselDuration}>
+                      <Text style={styles.carouselDurationText}>{formatDuration(clip.duration_seconds)}</Text>
+                    </View>
+                  </View>
+                  <View style={styles.carouselInfo}>
+                    <Text style={[styles.carouselTitle, { color: colors.text }]} numberOfLines={2}>{clip.title}</Text>
+                    <Text style={[styles.carouselMeta, { color: colors.textMid }]}>{formatTimeAgo(clip.created_at)}</Text>
                   </View>
                 </TouchableOpacity>
               ))}

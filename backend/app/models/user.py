@@ -47,3 +47,4 @@ class User(Base):
     # Relationships
     videos = relationship("Video", back_populates="user", lazy="selectin")
     folders = relationship("Folder", back_populates="user", lazy="selectin")
+    clips = relationship("Clip", back_populates="user")

@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.repositories.vector_db import vector_db
 from app.repositories.video_repo import VideoRepository
+from app.services.clip_service import ClipService
 from app.services.storage_service import StorageService
 from app.utils.video_metadata import extract_metadata
 
@@ -90,6 +91,10 @@ class VideoService:
         video = await self.repo.get_by_id(video_id, user_id)
         if not video:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
+
+        # Delete associated clips and their files
+        clip_service = ClipService(self.repo.db)
+        await clip_service.delete_clips_for_video(video_id, user_id)
 
         # Delete embeddings from Qdrant
         vector_db.delete_by_video_id(str(user_id), str(video_id))

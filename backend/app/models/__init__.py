@@ -4,5 +4,6 @@ from app.models.frame import Frame
 from app.models.job import Job
 from app.models.folder import Folder
 from app.models.search_history import SearchHistory, UserAnalytics
+from app.models.clip import Clip
 
-__all__ = ["User", "Video", "Frame", "Job", "Folder", "SearchHistory", "UserAnalytics"]
+__all__ = ["User", "Video", "Frame", "Job", "Folder", "SearchHistory", "UserAnalytics", "Clip"]
