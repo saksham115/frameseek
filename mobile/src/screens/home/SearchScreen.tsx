@@ -3,10 +3,8 @@ import { View, Text, FlatList, StyleSheet } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTheme } from '../../hooks/useTheme';
-import { useDebounce } from '../../hooks/useDebounce';
 import { useSearchStore } from '../../store/slices/searchSlice';
 import { FontFamily, FontSize, Spacing } from '../../constants/theme';
-import { SEARCH_DEBOUNCE_MS } from '../../constants/config';
 import SearchBar from '../../components/search/SearchBar';
 import FilterChips from '../../components/search/FilterChips';
 import VideoSearchCard from '../../components/search/VideoSearchCard';
@@ -44,22 +42,25 @@ export default function SearchScreen() {
     performSearch, clearResults, history, fetchHistory,
     sourceFilter, setSourceFilter,
   } = useSearchStore();
-  const debouncedQuery = useDebounce(query, SEARCH_DEBOUNCE_MS);
-
   useEffect(() => {
     fetchHistory();
   }, []);
 
-  useEffect(() => {
-    if (debouncedQuery.trim().length >= 3) {
-      performSearch(debouncedQuery);
+  const handleSearch = useCallback((text: string) => {
+    if (text.trim().length >= 2) {
+      performSearch(text);
     }
-  }, [debouncedQuery, sourceFilter]);
+  }, [performSearch, sourceFilter]);
 
   const handleFilterSelect = useCallback((label: string) => {
     const value = filterValueMap[label] || 'all';
     setSourceFilter(value);
-  }, [setSourceFilter]);
+    // Re-search with new filter if there's an active query
+    if (query.trim().length >= 2) {
+      // Small delay to let the store update sourceFilter
+      setTimeout(() => performSearch(query), 0);
+    }
+  }, [setSourceFilter, query, performSearch]);
 
   // Group results by video
   const groupedVideos = useMemo<GroupedVideo[]>(() => {
@@ -99,6 +100,7 @@ export default function SearchScreen() {
         <SearchBar
           value={query}
           onChangeText={setQuery}
+          onSubmit={handleSearch}
           autoFocus
           onClear={clearResults}
         />

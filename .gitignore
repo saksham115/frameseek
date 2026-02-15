@@ -10,10 +10,8 @@ service-account.json
 *.pem
 *.key
 
-# Storage - uploaded videos, extracted frames, thumbnails
-backend/storage/videos/
-backend/storage/frames/
-backend/storage/thumbnails/
+# Storage - runtime data (videos, frames, clips, thumbnails)
+backend/storage/
 
 # Testing
 .pytest_cache/

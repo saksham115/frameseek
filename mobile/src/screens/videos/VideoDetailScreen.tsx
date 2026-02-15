@@ -36,7 +36,6 @@ export default function VideoDetailScreen({ route, navigation }: VideoDetailScre
   const [transcriptSegments, setTranscriptSegments] = useState<TranscriptSegmentData[]>([]);
   const [loadingTranscript, setLoadingTranscript] = useState(false);
   const [currentPositionSec, setCurrentPositionSec] = useState(0);
-  const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const titleInputRef = useRef<TextInput>(null);
   const videoRef = useRef<Video>(null);
   const scrollRef = useRef<ScrollView>(null);
@@ -118,13 +117,10 @@ export default function VideoDetailScreen({ route, navigation }: VideoDetailScre
 
   const onSearchChange = (text: string) => {
     setSearchQuery(text);
-    if (searchTimeout.current) clearTimeout(searchTimeout.current);
     if (!text.trim()) {
       setSearchResults([]);
       setHasSearched(false);
-      return;
     }
-    searchTimeout.current = setTimeout(() => handleSearch(text), 500);
   };
 
   const handleFrameTap = async (result: SearchResultData) => {
@@ -305,6 +301,7 @@ export default function VideoDetailScreen({ route, navigation }: VideoDetailScre
           <SearchBar
             value={searchQuery}
             onChangeText={onSearchChange}
+            onSubmit={(text) => handleSearch(text)}
             placeholder="Search in this video..."
             onClear={() => { setSearchResults([]); setHasSearched(false); setSelectedFrameId(null); }}
           />
