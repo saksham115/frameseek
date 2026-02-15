@@ -6,6 +6,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTheme } from '../../hooks/useTheme';
 import { BorderRadius, FontFamily, FontSize, Spacing } from '../../constants/theme';
+import { STORAGE_BASE_URL } from '../../constants/config';
 import { useAuthStore } from '../../store/slices/authSlice';
 import { apiClient } from '../../services/api';
 import SearchBar from '../../components/search/SearchBar';
@@ -72,8 +73,8 @@ export default function DashboardScreen() {
                   style={[styles.carouselCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
                 >
                   <View style={[styles.carouselThumb, { backgroundColor: colors.surfaceRaised }]}>
-                    {item.thumbnail_uri ? (
-                      <Image source={{ uri: item.thumbnail_uri }} style={styles.carouselThumbImage} />
+                    {(item.thumbnail_url || item.thumbnail_uri) ? (
+                      <Image source={{ uri: item.thumbnail_url ? `${STORAGE_BASE_URL}${item.thumbnail_url.replace('/storage', '')}` : item.thumbnail_uri! }} style={styles.carouselThumbImage} />
                     ) : (
                       <Ionicons name="videocam" size={28} color={colors.textDim} />
                     )}

@@ -192,12 +192,12 @@ export default function VideoDetailScreen({ route, navigation }: VideoDetailScre
         </View>
       )}
 
-      {/* Video player */}
+      {/* Video player — prefer server URL (survives app/server restart) over local_uri (may be stale) */}
       <View onLayout={(e) => { videoPlayerY.current = e.nativeEvent.layout.y; }}>
-        {video.local_uri ? (
+        {(video.video_url || video.local_uri) ? (
           <Video
             ref={videoRef}
-            source={{ uri: video.local_uri }}
+            source={{ uri: video.video_url ? `${STORAGE_BASE_URL}${video.video_url.replace('/storage', '')}` : video.local_uri! }}
             style={styles.videoPlayer}
             useNativeControls
             resizeMode={ResizeMode.CONTAIN}
@@ -205,7 +205,7 @@ export default function VideoDetailScreen({ route, navigation }: VideoDetailScre
         ) : (
           <View style={[styles.playerPlaceholder, { backgroundColor: colors.surfaceRaised }]}>
             <Ionicons name="videocam-off-outline" size={48} color={colors.textDim} />
-            <Text style={[styles.durationOverlay, { color: colors.textMid }]}>Video not available locally</Text>
+            <Text style={[styles.durationOverlay, { color: colors.textMid }]}>Video not available</Text>
           </View>
         )}
       </View>

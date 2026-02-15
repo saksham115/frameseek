@@ -47,7 +47,7 @@ app.add_middleware(
 )
 
 # Mount static storage for serving frames/thumbnails
-app.mount("/storage", StaticFiles(directory=settings.STORAGE_BASE_PATH), name="storage")
+app.mount("/storage", StaticFiles(directory=str(settings.storage_path)), name="storage")
 
 # Register routers
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])

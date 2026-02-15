@@ -39,7 +39,7 @@ class Settings(BaseSettings):
 
     @property
     def storage_path(self) -> Path:
-        path = Path(self.STORAGE_BASE_PATH)
+        path = Path(self.STORAGE_BASE_PATH).resolve()
         path.mkdir(parents=True, exist_ok=True)
         return path
 

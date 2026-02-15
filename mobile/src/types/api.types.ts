@@ -55,6 +55,8 @@ export interface VideoData {
   frame_count: number | null;
   local_uri: string | null;
   thumbnail_uri: string | null;
+  video_url: string | null;
+  thumbnail_url: string | null;
   source_type: string;
   folder_id: string | null;
   tags: string[] | null;

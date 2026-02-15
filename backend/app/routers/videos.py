@@ -1,9 +1,11 @@
 import math
+from pathlib import Path
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.user import User
@@ -24,6 +26,29 @@ from app.services.video_service import VideoService
 router = APIRouter()
 
 
+def _to_video_response(video) -> VideoResponse:
+    """Build VideoResponse with server-side video_url and thumbnail_url."""
+    resp = VideoResponse.model_validate(video)
+
+    # Compute server-side video URL from file_path
+    if video.file_path:
+        try:
+            storage_root = Path(settings.STORAGE_BASE_PATH).resolve()
+            file_abs = Path(video.file_path).resolve()
+            rel = file_abs.relative_to(storage_root)
+            resp.video_url = f"/storage/{rel}"
+        except (ValueError, RuntimeError):
+            pass
+
+    # Compute thumbnail URL: first extracted frame thumbnail
+    if video.video_id:
+        thumb_path = Path(settings.STORAGE_BASE_PATH).resolve() / "frames" / str(video.video_id) / "thumb_000000.jpg"
+        if thumb_path.exists():
+            resp.thumbnail_url = f"/storage/frames/{video.video_id}/thumb_000000.jpg"
+
+    return resp
+
+
 @router.get("", response_model=ApiResponse[VideoListResponse])
 async def list_videos(
     folder_id: UUID | None = Query(None),
@@ -42,7 +67,7 @@ async def list_videos(
         page=page, limit=limit, sort=sort, order=order,
     )
     return ApiResponse(data=VideoListResponse(
-        videos=[VideoResponse.model_validate(v) for v in videos],
+        videos=[_to_video_response(v) for v in videos],
         pagination=Pagination(page=page, limit=limit, total=total, total_pages=math.ceil(total / limit) if limit else 0),
     ))
 
@@ -69,7 +94,7 @@ async def upload_video(
         from app.schemas.video import JobBriefResponse
         job = JobBriefResponse.model_validate(job_model)
 
-    return ApiResponse(data=VideoUploadResponse(video=VideoResponse.model_validate(video), job=job))
+    return ApiResponse(data=VideoUploadResponse(video=_to_video_response(video), job=job))
 
 
 @router.get("/{video_id}", response_model=ApiResponse[VideoDetailResponse])
@@ -93,7 +118,7 @@ async def get_video(
         job_brief = JobBriefResponse.model_validate(active_job)
 
     return ApiResponse(data=VideoDetailResponse(
-        video=VideoResponse.model_validate(video),
+        video=_to_video_response(video),
         frames_count=frames_count,
         job=job_brief,
     ))
@@ -115,7 +140,7 @@ async def update_video(
 
     frames_count = await service.get_frame_count(video_id)
     return ApiResponse(data=VideoDetailResponse(
-        video=VideoResponse.model_validate(video),
+        video=_to_video_response(video),
         frames_count=frames_count,
     ))
 

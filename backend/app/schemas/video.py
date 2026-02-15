@@ -26,6 +26,8 @@ class VideoResponse(BaseModel):
     frame_count: int | None = None
     local_uri: str | None = None
     thumbnail_uri: str | None = None
+    video_url: str | None = None
+    thumbnail_url: str | None = None
     source_type: str = "local"
     folder_id: UUID | None = None
     tags: list[str] | None = None

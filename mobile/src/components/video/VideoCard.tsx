@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../hooks/useTheme';
 import { BorderRadius, FontFamily, FontSize, Spacing } from '../../constants/theme';
+import { STORAGE_BASE_URL } from '../../constants/config';
 import Badge from '../common/Badge';
 import { formatDuration, formatFileSize, formatTimeAgo } from '../../utils/formatting';
 import type { VideoData } from '../../types/api.types';
@@ -25,8 +26,8 @@ export default function VideoCard({ video, onPress, onDelete }: VideoCardProps) 
   return (
     <TouchableOpacity onPress={onPress} activeOpacity={0.7} style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
       <View style={[styles.thumbnail, { backgroundColor: colors.surfaceRaised }]}>
-        {video.thumbnail_uri ? (
-          <Image source={{ uri: video.thumbnail_uri }} style={styles.thumbnailImage} />
+        {(video.thumbnail_url || video.thumbnail_uri) ? (
+          <Image source={{ uri: video.thumbnail_url ? `${STORAGE_BASE_URL}${video.thumbnail_url.replace('/storage', '')}` : video.thumbnail_uri! }} style={styles.thumbnailImage} />
         ) : (
           <Ionicons name="videocam" size={24} color={colors.textDim} />
         )}
