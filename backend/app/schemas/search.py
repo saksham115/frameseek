@@ -23,6 +23,7 @@ class SearchResultItem(BaseModel):
     frame_url: str
     thumbnail_url: str | None = None
     source_type: str
+    match_type: str = "semantic_visual"  # "exact" | "semantic_audio" | "semantic_visual"
     transcript_text: str | None = None
     segment_start: float | None = None
     segment_end: float | None = None

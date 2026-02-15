@@ -113,6 +113,7 @@ export interface SearchResultData {
   frame_url: string;
   thumbnail_url: string | null;
   source_type: string;
+  match_type?: string;  // "exact" | "semantic_audio" | "semantic_visual"
   transcript_text?: string;
   segment_start?: number;
   segment_end?: number;

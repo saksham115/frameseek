@@ -514,23 +514,43 @@ export default function VideoDetailScreen({ route, navigation }: VideoDetailScre
                       styles.resultCard,
                       {
                         backgroundColor: colors.surface,
-                        borderColor: isSelected ? colors.amber : isTranscript ? colors.amber + '60' : colors.border,
+                        borderColor: isSelected ? colors.amber : result.match_type === 'exact' ? colors.success : isTranscript ? colors.amber + '60' : colors.border,
                         borderWidth: isSelected ? 2 : 1,
                       },
                     ]}
                   >
-                    {isSelected && (
-                      <View style={[styles.playingBadge, { backgroundColor: colors.amber }]}>
-                        <Ionicons name="play" size={8} color="#fff" />
-                        <Text style={styles.playingText}>Playing</Text>
-                      </View>
-                    )}
-                    {isTranscript && !isSelected && (
-                      <View style={[styles.audioBadge, { backgroundColor: colors.amber }]}>
-                        <Ionicons name="mic" size={8} color="#fff" />
-                        <Text style={styles.playingText}>Audio</Text>
-                      </View>
-                    )}
+                    {(() => {
+                      if (isSelected) {
+                        return (
+                          <View style={[styles.audioBadge, { backgroundColor: colors.amber }]}>
+                            <Ionicons name="play" size={8} color="#fff" />
+                            <Text style={styles.playingText}>Playing</Text>
+                          </View>
+                        );
+                      }
+                      if (result.match_type === 'exact') {
+                        return (
+                          <View style={[styles.audioBadge, { backgroundColor: colors.success }]}>
+                            <Ionicons name="checkmark-circle" size={8} color="#fff" />
+                            <Text style={styles.playingText}>Exact</Text>
+                          </View>
+                        );
+                      }
+                      if (result.match_type === 'semantic_audio') {
+                        return (
+                          <View style={[styles.audioBadge, { backgroundColor: colors.amber }]}>
+                            <Ionicons name="mic" size={8} color="#fff" />
+                            <Text style={styles.playingText}>Audio</Text>
+                          </View>
+                        );
+                      }
+                      return (
+                        <View style={[styles.audioBadge, { backgroundColor: '#5B8DEF' }]}>
+                          <Ionicons name="eye" size={8} color="#fff" />
+                          <Text style={styles.playingText}>Visual</Text>
+                        </View>
+                      );
+                    })()}
                     <TouchableOpacity
                       style={styles.moreBtn}
                       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -641,18 +661,6 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.md,
     overflow: 'hidden',
     position: 'relative',
-  },
-  playingBadge: {
-    position: 'absolute',
-    top: 6,
-    left: 6,
-    zIndex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: BorderRadius.sm,
   },
   playingText: {
     color: '#fff',

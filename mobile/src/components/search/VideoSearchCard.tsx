@@ -37,6 +37,13 @@ export default function VideoSearchCard({ videoTitle, results, onPress }: VideoS
         frame.push(r);
       }
     }
+    // Sort transcript: exact matches first, then by score desc
+    transcript.sort((a, b) => {
+      const aExact = a.match_type === 'exact' ? 1 : 0;
+      const bExact = b.match_type === 'exact' ? 1 : 0;
+      if (aExact !== bExact) return bExact - aExact;
+      return b.score - a.score;
+    });
     return { frameResults: frame, transcriptResults: transcript };
   }, [results]);
 
@@ -44,8 +51,12 @@ export default function VideoSearchCard({ videoTitle, results, onPress }: VideoS
   const remaining = frameResults.length - MAX_THUMBS;
   const topScore = Math.round(results[0].score * 100);
 
-  const audioCount = transcriptResults.length;
-  const matchText = `${results.length} ${results.length === 1 ? 'match' : 'matches'}${audioCount > 0 ? ` · ${audioCount} audio` : ''}`;
+  const exactCount = transcriptResults.filter((r) => r.match_type === 'exact').length;
+  const audioCount = transcriptResults.filter((r) => r.match_type !== 'exact').length;
+  const matchParts = [`${results.length} ${results.length === 1 ? 'match' : 'matches'}`];
+  if (exactCount > 0) matchParts.push(`${exactCount} exact`);
+  if (audioCount > 0) matchParts.push(`${audioCount} audio`);
+  const matchText = matchParts.join(' · ');
 
   return (
     <TouchableOpacity
@@ -109,6 +120,7 @@ export default function VideoSearchCard({ videoTitle, results, onPress }: VideoS
               text={result.transcript_text || ''}
               timestamp={result.formatted_timestamp}
               score={result.score}
+              matchType={result.match_type}
             />
           ))}
         </View>
