@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import tempfile
 from datetime import datetime, timezone
 from uuid import UUID
 
@@ -10,7 +11,9 @@ from app.config import settings
 from app.database import async_session
 from app.models.frame import Frame
 from app.models.job import Job
+from app.models.transcript import TranscriptSegment
 from app.models.video import Video
+from app.workers.audio_transcriber import AudioTranscriber
 from app.workers.embedding_generator import EmbeddingGenerator
 from app.workers.frame_extractor import FrameExtractor
 
@@ -18,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 async def process_video(job_id: str):
-    """Main video processing pipeline."""
+    """Main video processing pipeline (5 steps)."""
     async with async_session() as db:
         # Load job
         result = await db.execute(select(Job).where(Job.job_id == UUID(job_id)))
@@ -42,27 +45,22 @@ async def process_video(job_id: str):
             video.status = "processing"
             await db.commit()
 
-            # Step 1: Extract frames
+            # Step 1: Extract frames (0 → 30%)
             extractor = FrameExtractor(str(settings.storage_path / "frames"))
-
-            def frame_progress(pct: float):
-                # We'll update DB in batches, not per-frame for performance
-                pass
 
             extracted = extractor.extract_frames(
                 video_path=video.file_path,
                 video_id=str(video.video_id),
                 interval_seconds=job.frame_interval_seconds,
-                progress_callback=frame_progress,
             )
 
             job.total_frames = len(extracted)
-            job.progress = 40
+            job.progress = 30
             job.current_step = "saving_frames"
-            video.processing_progress = 40
+            video.processing_progress = 30
             await db.commit()
 
-            # Step 2: Save frame records to DB
+            # Step 2: Save frame records to DB (30 → 40%)
             frame_dicts = []
             for ef in extracted:
                 frame = Frame(
@@ -86,23 +84,28 @@ async def process_video(job_id: str):
                     "local_path": ef.local_path,
                 })
 
-            job.progress = 60
-            job.current_step = "generating_embeddings"
-            video.processing_progress = 60
+            job.progress = 40
+            job.current_step = "transcribing_audio"
+            video.processing_progress = 40
             await db.commit()
 
-            # Step 3: Generate embeddings and store in Qdrant
-            generator = EmbeddingGenerator()
+            # Step 3: Transcribe audio (40 → 55%)
+            transcript_chunks = []
+            await _transcribe_audio(db, video, frame_dicts, transcript_chunks)
 
-            def embed_progress(pct: float):
-                pass
+            job.progress = 55
+            job.current_step = "generating_embeddings"
+            video.processing_progress = 55
+            await db.commit()
+
+            # Step 4: Generate frame embeddings (55 → 80%)
+            generator = EmbeddingGenerator()
 
             stored = await generator.generate_and_store(
                 user_id=str(video.user_id),
                 video_id=str(video.video_id),
                 video_title=video.title,
                 frames=frame_dicts,
-                progress_callback=embed_progress,
             )
 
             # Update embedding IDs on frame records
@@ -114,6 +117,22 @@ async def process_video(job_id: str):
                 if frame_record:
                     frame_record.embedding_id = fd["frame_id"]
                     frame_record.embedding_generated_at = datetime.now(timezone.utc)
+
+            job.progress = 80
+            job.current_step = "embedding_transcripts"
+            video.processing_progress = 80
+            await db.commit()
+
+            # Step 5: Generate transcript embeddings (80 → 100%)
+            transcript_stored = 0
+            if video.transcript_status == "completed" and transcript_chunks:
+                transcript_stored = await generator.generate_and_store_transcripts(
+                    user_id=str(video.user_id),
+                    video_id=str(video.video_id),
+                    video_title=video.title,
+                    chunks=transcript_chunks,
+                    frames=frame_dicts,
+                )
 
             # Complete
             job.status = "completed"
@@ -127,7 +146,10 @@ async def process_video(job_id: str):
             video.processed_at = datetime.now(timezone.utc)
             await db.commit()
 
-            logger.info(f"Job {job_id} completed: {len(extracted)} frames, {stored} embeddings")
+            logger.info(
+                f"Job {job_id} completed: {len(extracted)} frames, {stored} frame embeddings, "
+                f"{transcript_stored} transcript embeddings"
+            )
 
         except Exception as e:
             logger.exception(f"Job {job_id} failed: {e}")
@@ -138,3 +160,153 @@ async def process_video(job_id: str):
             video.processing_progress = 0
             video.error_message = str(e)
             await db.commit()
+
+
+async def _transcribe_audio(
+    db: AsyncSession,
+    video: Video,
+    frame_dicts: list[dict],
+    transcript_chunks_out: list,
+    max_retries: int = 1,
+):
+    """Run transcription with retry. Non-blocking — failures don't stop the pipeline."""
+    transcriber = AudioTranscriber()
+
+    for attempt in range(max_retries + 1):
+        try:
+            video.transcript_status = "processing"
+            await db.commit()
+
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                result = transcriber.transcribe_video(video.file_path, tmp_dir)
+
+            if result is None:
+                # No audio track
+                video.transcript_status = "skipped"
+                await db.commit()
+                logger.info(f"Video {video.video_id}: no audio track, skipping transcription")
+                return
+
+            segments, language = result
+
+            if not segments:
+                video.transcript_status = "skipped"
+                await db.commit()
+                logger.info(f"Video {video.video_id}: no speech detected")
+                return
+
+            # Save transcript segments to DB
+            for seg in segments:
+                # Find nearest frame for this segment
+                midpoint = (seg.start + seg.end) / 2
+                nearest = EmbeddingGenerator._find_nearest_frame(frame_dicts, midpoint)
+                nearest_frame_id = UUID(nearest["frame_id"]) if nearest else None
+
+                ts = TranscriptSegment(
+                    video_id=video.video_id,
+                    user_id=video.user_id,
+                    segment_index=seg.index,
+                    start_seconds=seg.start,
+                    end_seconds=seg.end,
+                    text=seg.text,
+                    language=language,
+                    confidence=seg.avg_logprob,
+                    nearest_frame_id=nearest_frame_id,
+                )
+                db.add(ts)
+
+            await db.flush()
+
+            # Chunk segments for embedding
+            chunks = AudioTranscriber.chunk_segments(segments)
+            transcript_chunks_out.extend(chunks)
+
+            # Assign chunk groups to segment records
+            for chunk in chunks:
+                for seg_idx in chunk.segment_indices:
+                    # Find the segment record by index and update chunk_group
+                    pass  # chunk_group is informational; not critical
+
+            video.has_transcript = True
+            video.transcript_status = "completed"
+            video.transcript_language = language
+            video.transcript_segment_count = len(segments)
+            video.transcript_error = None
+            await db.commit()
+
+            logger.info(
+                f"Video {video.video_id}: transcribed {len(segments)} segments "
+                f"into {len(chunks)} chunks, language: {language}"
+            )
+            return
+
+        except Exception as e:
+            logger.warning(
+                f"Transcription attempt {attempt + 1}/{max_retries + 1} failed "
+                f"for video {video.video_id}: {e}"
+            )
+            if attempt < max_retries:
+                continue
+            # Final failure — non-blocking, pipeline continues
+            video.transcript_status = "failed"
+            video.transcript_error = str(e)[:2000]
+            await db.commit()
+            logger.error(f"Video {video.video_id}: transcription failed after retries: {e}")
+            return
+
+
+async def transcribe_video_standalone(video_id: str):
+    """Re-run just the transcription + transcript embedding steps for a video.
+
+    Used by the retry-transcript endpoint.
+    """
+    async with async_session() as db:
+        result = await db.execute(select(Video).where(Video.video_id == UUID(video_id)))
+        video = result.scalar_one_or_none()
+        if not video:
+            logger.error(f"Video {video_id} not found for transcript retry")
+            return
+
+        # Load existing frames for nearest-frame lookup
+        result = await db.execute(
+            select(Frame).where(Frame.video_id == video.video_id).order_by(Frame.frame_index)
+        )
+        frames = result.scalars().all()
+        frame_dicts = [
+            {
+                "frame_id": str(f.frame_id),
+                "frame_index": f.frame_index,
+                "timestamp_seconds": float(f.timestamp_seconds),
+                "local_path": f.frame_path,
+            }
+            for f in frames
+        ]
+
+        if not frame_dicts:
+            logger.error(f"Video {video_id}: no frames found, cannot retry transcription")
+            return
+
+        # Clear any previous transcript segments
+        from sqlalchemy import delete
+        await db.execute(
+            delete(TranscriptSegment).where(TranscriptSegment.video_id == video.video_id)
+        )
+        await db.commit()
+
+        # Run transcription
+        transcript_chunks: list = []
+        await _transcribe_audio(db, video, frame_dicts, transcript_chunks)
+
+        # Generate transcript embeddings if successful
+        if video.transcript_status == "completed" and transcript_chunks:
+            generator = EmbeddingGenerator()
+            stored = await generator.generate_and_store_transcripts(
+                user_id=str(video.user_id),
+                video_id=str(video.video_id),
+                video_title=video.title,
+                chunks=transcript_chunks,
+                frames=frame_dicts,
+            )
+            logger.info(f"Video {video_id}: retry stored {stored} transcript embeddings")
+
+        await db.commit()

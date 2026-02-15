@@ -58,6 +58,11 @@ export interface VideoData {
   video_url: string | null;
   thumbnail_url: string | null;
   source_type: string;
+  has_transcript: boolean;
+  transcript_status: string;
+  transcript_language: string | null;
+  transcript_segment_count: number | null;
+  transcript_error: string | null;
   folder_id: string | null;
   tags: string[] | null;
   duration_seconds: number | null;
@@ -108,6 +113,10 @@ export interface SearchResultData {
   frame_url: string;
   thumbnail_url: string | null;
   source_type: string;
+  transcript_text?: string;
+  segment_start?: number;
+  segment_end?: number;
+  segment_id?: string;
 }
 
 export interface SearchResponseData {
@@ -120,6 +129,22 @@ export interface SearchResponseData {
     limit: number;
     remaining: number;
   };
+}
+
+export interface TranscriptSegmentData {
+  segment_id: string;
+  segment_index: number;
+  start_seconds: number;
+  end_seconds: number;
+  text: string;
+  language: string | null;
+  confidence: number | null;
+}
+
+export interface TranscriptResponseData {
+  segments: TranscriptSegmentData[];
+  language: string | null;
+  total_segments: number;
 }
 
 export interface FolderData {

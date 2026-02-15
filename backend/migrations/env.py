@@ -10,7 +10,7 @@ from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from app.database import Base
-from app.models import User, Video, Frame, Job, Folder, SearchHistory, UserAnalytics
+from app.models import User, Video, Frame, Job, Folder, SearchHistory, UserAnalytics, Clip, TranscriptSegment
 
 config = context.config
 if config.config_file_name is not None:

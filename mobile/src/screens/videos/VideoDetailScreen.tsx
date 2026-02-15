@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, TextInput, StyleSheet, ScrollView, Alert, Image, TouchableOpacity, Keyboard, ActionSheetIOS, Platform } from 'react-native';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,7 +14,7 @@ import EmptyState from '../../components/common/EmptyState';
 import { formatDuration, formatFileSize, formatTimeAgo } from '../../utils/formatting';
 import { useFocusEffect } from '@react-navigation/native';
 import type { VideoDetailScreenProps } from '../../types/navigation.types';
-import type { ClipData, SearchResultData, VideoData } from '../../types/api.types';
+import type { ClipData, SearchResultData, TranscriptSegmentData, VideoData } from '../../types/api.types';
 
 export default function VideoDetailScreen({ route, navigation }: VideoDetailScreenProps) {
   const { videoId, searchQuery: incomingQuery, searchResults: incomingResults } = route.params;
@@ -22,6 +22,7 @@ export default function VideoDetailScreen({ route, navigation }: VideoDetailScre
   const [video, setVideo] = useState<VideoData | null>(null);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
+  const [retryingTranscript, setRetryingTranscript] = useState(false);
   const [searchQuery, setSearchQuery] = useState(incomingQuery ?? '');
   const [searchResults, setSearchResults] = useState<SearchResultData[]>(incomingResults ?? []);
   const [searching, setSearching] = useState(false);
@@ -31,6 +32,10 @@ export default function VideoDetailScreen({ route, navigation }: VideoDetailScre
   const [editTitle, setEditTitle] = useState('');
   const [savingTitle, setSavingTitle] = useState(false);
   const [clips, setClips] = useState<ClipData[]>([]);
+  const [transcriptExpanded, setTranscriptExpanded] = useState(false);
+  const [transcriptSegments, setTranscriptSegments] = useState<TranscriptSegmentData[]>([]);
+  const [loadingTranscript, setLoadingTranscript] = useState(false);
+  const [currentPositionSec, setCurrentPositionSec] = useState(0);
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const titleInputRef = useRef<TextInput>(null);
   const videoRef = useRef<Video>(null);
@@ -69,6 +74,29 @@ export default function VideoDetailScreen({ route, navigation }: VideoDetailScre
       if (pollRef.current) clearInterval(pollRef.current);
     };
   }, [isProcessing]);
+
+  // Auto-fetch transcript segments when video has a transcript (for viewer highlighting)
+  useEffect(() => {
+    if (video?.has_transcript && transcriptSegments.length === 0) {
+      videosApi.getTranscript(videoId)
+        .then((res) => setTranscriptSegments(res.data.data.segments))
+        .catch(() => {});
+    }
+  }, [video?.has_transcript]);
+
+  // Find the active segment for the current playback position (transcript highlight)
+  const activeSegment = useMemo(() => {
+    if (transcriptSegments.length === 0) return null;
+    return transcriptSegments.find(
+      (seg) => currentPositionSec >= seg.start_seconds && currentPositionSec <= seg.end_seconds
+    ) ?? null;
+  }, [transcriptSegments, currentPositionSec]);
+
+  const onPlaybackStatusUpdate = useCallback((status: AVPlaybackStatus) => {
+    if (status.isLoaded && status.positionMillis != null) {
+      setCurrentPositionSec(status.positionMillis / 1000);
+    }
+  }, []);
 
   const handleSearch = useCallback(async (query: string) => {
     if (!query.trim()) {
@@ -161,6 +189,59 @@ export default function VideoDetailScreen({ route, navigation }: VideoDetailScre
     }
   };
 
+  const handleRetryTranscript = async () => {
+    setRetryingTranscript(true);
+    try {
+      await videosApi.retryTranscript(videoId);
+      Alert.alert('Transcript', 'Transcription has been queued. It will process in the background.');
+      await loadData();
+    } catch (err: any) {
+      Alert.alert('Error', err.response?.data?.detail || 'Failed to start transcription');
+    } finally {
+      setRetryingTranscript(false);
+    }
+  };
+
+  const handleToggleTranscript = async () => {
+    if (transcriptExpanded) {
+      setTranscriptExpanded(false);
+      return;
+    }
+    // Fetch transcript if not yet loaded
+    if (transcriptSegments.length === 0) {
+      setLoadingTranscript(true);
+      try {
+        const res = await videosApi.getTranscript(videoId);
+        setTranscriptSegments(res.data.data.segments);
+      } catch {
+        Alert.alert('Error', 'Failed to load transcript');
+        return;
+      } finally {
+        setLoadingTranscript(false);
+      }
+    }
+    setTranscriptExpanded(true);
+  };
+
+  const handleTranscriptSegmentTap = async (segment: TranscriptSegmentData) => {
+    scrollRef.current?.scrollTo({ y: videoPlayerY.current, animated: true });
+    if (videoRef.current) {
+      try {
+        await videoRef.current.setPositionAsync(segment.start_seconds * 1000, {
+          toleranceMillisBefore: 0,
+          toleranceMillisAfter: 0,
+        });
+        await videoRef.current.playAsync();
+      } catch {}
+    }
+  };
+
+  const formatTimestamp = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
+
   const handleDelete = () => {
     Alert.alert('Delete Video', 'Are you sure? This cannot be undone.', [
       { text: 'Cancel', style: 'cancel' },
@@ -240,6 +321,8 @@ export default function VideoDetailScreen({ route, navigation }: VideoDetailScre
             style={styles.videoPlayer}
             useNativeControls
             resizeMode={ResizeMode.CONTAIN}
+            onPlaybackStatusUpdate={onPlaybackStatusUpdate}
+            progressUpdateIntervalMillis={250}
           />
         ) : (
           <View style={[styles.playerPlaceholder, { backgroundColor: colors.surfaceRaised }]}>
@@ -290,6 +373,113 @@ export default function VideoDetailScreen({ route, navigation }: VideoDetailScre
         )}
       </View>
 
+      {/* Transcript status */}
+      {video.status === 'ready' && (
+        <View style={styles.transcriptSection}>
+          <TouchableOpacity
+            onPress={video.has_transcript ? handleToggleTranscript : undefined}
+            activeOpacity={video.has_transcript ? 0.7 : 1}
+            style={styles.transcriptHeaderRow}
+          >
+            <View style={styles.transcriptHeader}>
+              <Ionicons name="mic-outline" size={16} color={colors.textMid} />
+              <Text style={[styles.transcriptTitle, { color: colors.text }]}>Audio Transcript</Text>
+            </View>
+            {video.has_transcript && (
+              <Ionicons
+                name={transcriptExpanded ? 'chevron-up' : 'chevron-down'}
+                size={18}
+                color={colors.textMid}
+              />
+            )}
+          </TouchableOpacity>
+          {video.has_transcript ? (
+            <View style={styles.transcriptInfo}>
+              <Badge label="Transcribed" variant="success" />
+              {video.transcript_language && (
+                <Text style={[styles.meta, { color: colors.textMid }]}>
+                  {video.transcript_language.toUpperCase()}
+                </Text>
+              )}
+              {video.transcript_segment_count != null && (
+                <Text style={[styles.meta, { color: colors.textMid }]}>
+                  {video.transcript_segment_count} segments
+                </Text>
+              )}
+            </View>
+          ) : video.transcript_status === 'failed' ? (
+            <View style={styles.transcriptInfo}>
+              <Badge label="Failed" variant="error" />
+              <Text style={[styles.meta, { color: colors.textMid }]} numberOfLines={1}>
+                {video.transcript_error || 'Transcription failed'}
+              </Text>
+            </View>
+          ) : video.transcript_status === 'skipped' ? (
+            <View style={styles.transcriptInfo}>
+              <Badge label="Skipped" variant="default" />
+              <Text style={[styles.meta, { color: colors.textMid }]}>No audio track detected</Text>
+            </View>
+          ) : video.transcript_status === 'processing' ? (
+            <View style={styles.transcriptInfo}>
+              <Badge label="Processing" variant="amber" />
+              <Text style={[styles.meta, { color: colors.textMid }]}>Transcribing audio...</Text>
+            </View>
+          ) : (
+            <View style={styles.transcriptInfo}>
+              <Badge label="Pending" variant="default" />
+              <Text style={[styles.meta, { color: colors.textMid }]}>Not yet transcribed</Text>
+            </View>
+          )}
+          {video.transcript_status === 'failed' && (
+            <Button
+              title="Retry Transcript"
+              onPress={handleRetryTranscript}
+              loading={retryingTranscript}
+              variant="secondary"
+            />
+          )}
+
+          {/* Expanded transcript viewer */}
+          {loadingTranscript && (
+            <View style={styles.searchLoading}>
+              <LoadingSpinner />
+            </View>
+          )}
+          {transcriptExpanded && transcriptSegments.length > 0 && (
+            <ScrollView
+              nestedScrollEnabled
+              style={[styles.transcriptViewer, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}
+            >
+              {transcriptSegments.map((seg, idx) => {
+                const isActive = activeSegment?.segment_id === seg.segment_id;
+                return (
+                  <TouchableOpacity
+                    key={seg.segment_id}
+                    onPress={() => handleTranscriptSegmentTap(seg)}
+                    activeOpacity={0.7}
+                    style={[
+                      styles.transcriptRow,
+                      idx < transcriptSegments.length - 1 && { borderBottomColor: colors.border },
+                      isActive && { backgroundColor: colors.amberDim },
+                    ]}
+                  >
+                    <Text style={[styles.transcriptTimestamp, { color: isActive ? colors.amber : colors.textMid }]}>
+                      {formatTimestamp(seg.start_seconds)}
+                    </Text>
+                    <Text style={[styles.transcriptText, { color: isActive ? colors.text : colors.textMid }]}>
+                      {seg.text}
+                    </Text>
+                    {isActive && (
+                      <Ionicons name="volume-high" size={12} color={colors.amber} style={{ flexShrink: 0, marginLeft: 4 }} />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          )}
+        </View>
+      )}
+
       {/* Actions */}
       {video.status === 'uploaded' && (
         <View style={styles.actions}>
@@ -307,23 +497,24 @@ export default function VideoDetailScreen({ route, navigation }: VideoDetailScre
           )}
 
           {!searching && hasSearched && searchResults.length === 0 && (
-            <Text style={[styles.noResults, { color: colors.textMid }]}>No matching frames found</Text>
+            <Text style={[styles.noResults, { color: colors.textMid }]}>No matching frames or audio found</Text>
           )}
 
           {searchResults.length > 0 && (
             <View style={styles.resultsGrid}>
               {searchResults.map((result) => {
                 const isSelected = selectedFrameId === result.frame_id;
+                const isTranscript = result.source_type === 'transcript';
                 return (
                   <TouchableOpacity
-                    key={result.frame_id}
+                    key={isTranscript ? (result.segment_id || result.frame_id) : result.frame_id}
                     activeOpacity={0.8}
                     onPress={() => handleFrameTap(result)}
                     style={[
                       styles.resultCard,
                       {
                         backgroundColor: colors.surface,
-                        borderColor: isSelected ? colors.amber : colors.border,
+                        borderColor: isSelected ? colors.amber : isTranscript ? colors.amber + '60' : colors.border,
                         borderWidth: isSelected ? 2 : 1,
                       },
                     ]}
@@ -332,6 +523,12 @@ export default function VideoDetailScreen({ route, navigation }: VideoDetailScre
                       <View style={[styles.playingBadge, { backgroundColor: colors.amber }]}>
                         <Ionicons name="play" size={8} color="#fff" />
                         <Text style={styles.playingText}>Playing</Text>
+                      </View>
+                    )}
+                    {isTranscript && !isSelected && (
+                      <View style={[styles.audioBadge, { backgroundColor: colors.amber }]}>
+                        <Ionicons name="mic" size={8} color="#fff" />
+                        <Text style={styles.playingText}>Audio</Text>
                       </View>
                     )}
                     <TouchableOpacity
@@ -346,6 +543,13 @@ export default function VideoDetailScreen({ route, navigation }: VideoDetailScre
                       style={styles.resultImage}
                       resizeMode="cover"
                     />
+                    {isTranscript && result.transcript_text ? (
+                      <View style={[styles.transcriptSnippet, { backgroundColor: colors.amberDim }]}>
+                        <Text style={[styles.transcriptSnippetText, { color: colors.text }]} numberOfLines={2}>
+                          "{result.transcript_text}"
+                        </Text>
+                      </View>
+                    ) : null}
                     <View style={styles.resultInfo}>
                       <Text style={[styles.resultTime, { color: isSelected ? colors.amber : colors.textMid }]}>
                         {result.formatted_timestamp}
@@ -455,10 +659,31 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.semiBold,
     fontSize: 9,
   },
+  audioBadge: {
+    position: 'absolute',
+    top: 6,
+    left: 6,
+    zIndex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: BorderRadius.sm,
+  },
   resultImage: {
     width: '100%',
     height: 90,
     backgroundColor: '#1A1A1E',
+  },
+  transcriptSnippet: {
+    paddingHorizontal: Spacing.xs,
+    paddingVertical: 4,
+  },
+  transcriptSnippetText: {
+    fontFamily: FontFamily.regular,
+    fontSize: 10,
+    fontStyle: 'italic',
   },
   resultInfo: {
     padding: Spacing.xs,
@@ -468,6 +693,36 @@ const styles = StyleSheet.create({
   },
   resultTime: { fontFamily: FontFamily.mono, fontSize: FontSize.xs },
   resultScore: { fontFamily: FontFamily.regular, fontSize: 10 },
+  transcriptSection: { paddingHorizontal: Spacing.xl, paddingBottom: Spacing.md, gap: Spacing.sm },
+  transcriptHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  transcriptHeader: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
+  transcriptTitle: { fontFamily: FontFamily.semiBold, fontSize: FontSize.sm },
+  transcriptInfo: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, flexWrap: 'wrap' },
+  transcriptViewer: {
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    overflow: 'hidden',
+    maxHeight: 360,
+  },
+  transcriptRow: {
+    flexDirection: 'row',
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: Spacing.sm,
+  },
+  transcriptTimestamp: {
+    fontFamily: FontFamily.mono,
+    fontSize: FontSize.xs,
+    width: 42,
+    flexShrink: 0,
+  },
+  transcriptText: {
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.sm,
+    flex: 1,
+    lineHeight: 20,
+  },
   actions: { padding: Spacing.xl, gap: Spacing.sm },
   moreBtn: {
     position: 'absolute',

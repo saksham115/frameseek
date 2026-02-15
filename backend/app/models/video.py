@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import BigInteger, ForeignKey, Integer, String, Text
+from sqlalchemy import BigInteger, Boolean, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TIMESTAMP, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
@@ -40,6 +40,13 @@ class Video(Base):
     frame_count: Mapped[int | None] = mapped_column(Integer)
     error_message: Mapped[str | None] = mapped_column(Text)
 
+    # Transcript
+    has_transcript: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    transcript_status: Mapped[str] = mapped_column(String(20), default="pending", server_default="pending")
+    transcript_language: Mapped[str | None] = mapped_column(String(10))
+    transcript_segment_count: Mapped[int | None] = mapped_column(Integer)
+    transcript_error: Mapped[str | None] = mapped_column(Text)
+
     # Organization
     folder_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("folders.folder_id", ondelete="SET NULL"))
     tags: Mapped[list | None] = mapped_column(ARRAY(String(100)))
@@ -66,3 +73,4 @@ class Video(Base):
     frames = relationship("Frame", back_populates="video", cascade="all, delete-orphan")
     jobs = relationship("Job", back_populates="video", cascade="all, delete-orphan")
     clips = relationship("Clip", back_populates="video", cascade="all, delete-orphan")
+    transcript_segments = relationship("TranscriptSegment", back_populates="video", cascade="all, delete-orphan")

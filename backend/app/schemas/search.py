@@ -23,6 +23,10 @@ class SearchResultItem(BaseModel):
     frame_url: str
     thumbnail_url: str | None = None
     source_type: str
+    transcript_text: str | None = None
+    segment_start: float | None = None
+    segment_end: float | None = None
+    segment_id: str | None = None
 
 
 class SearchQuota(BaseModel):

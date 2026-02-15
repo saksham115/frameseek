@@ -1,4 +1,4 @@
-import type { ApiResponse, FrameData, Pagination, VideoData } from '../../types/api.types';
+import type { ApiResponse, FrameData, Pagination, TranscriptResponseData, VideoData } from '../../types/api.types';
 import apiClient from './client';
 
 export const videosApi = {
@@ -36,6 +36,12 @@ export const videosApi = {
 
   process: (videoId: string, data?: { frame_interval?: number; priority?: number }) =>
     apiClient.post(`/videos/${videoId}/process`, data),
+
+  retryTranscript: (videoId: string) =>
+    apiClient.post(`/videos/${videoId}/retry-transcript`),
+
+  getTranscript: (videoId: string) =>
+    apiClient.get<ApiResponse<TranscriptResponseData>>(`/videos/${videoId}/transcript`),
 
   listFrames: (videoId: string, params?: { page?: number; limit?: number }) =>
     apiClient.get<ApiResponse<{ frames: FrameData[]; pagination: Pagination }>>(

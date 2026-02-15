@@ -29,6 +29,11 @@ class VideoResponse(BaseModel):
     video_url: str | None = None
     thumbnail_url: str | None = None
     source_type: str = "local"
+    has_transcript: bool = False
+    transcript_status: str = "pending"
+    transcript_language: str | None = None
+    transcript_segment_count: int | None = None
+    transcript_error: str | None = None
     folder_id: UUID | None = None
     tags: list[str] | None = None
     duration_seconds: Decimal | None = None
@@ -86,6 +91,24 @@ class FrameResponse(BaseModel):
 class FrameListResponse(BaseModel):
     frames: list[FrameResponse]
     pagination: Pagination
+
+
+class TranscriptSegmentResponse(BaseModel):
+    segment_id: UUID
+    segment_index: int
+    start_seconds: float
+    end_seconds: float
+    text: str
+    language: str | None = None
+    confidence: float | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class TranscriptResponse(BaseModel):
+    segments: list[TranscriptSegmentResponse]
+    language: str | None = None
+    total_segments: int
 
 
 class JobBriefResponse(BaseModel):

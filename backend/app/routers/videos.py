@@ -14,6 +14,8 @@ from app.schemas.video import (
     FrameListResponse,
     FrameResponse,
     ProcessRequest,
+    TranscriptResponse,
+    TranscriptSegmentResponse,
     VideoDetailResponse,
     VideoListResponse,
     VideoResponse,
@@ -167,6 +169,57 @@ async def process_video(
     job = await service.create_processing_job(video_id, user.user_id, data.frame_interval, data.priority)
     from app.schemas.job import JobResponse
     return ApiResponse(data={"job": JobResponse.model_validate(job)})
+
+
+@router.post("/{video_id}/retry-transcript")
+async def retry_transcript(
+    video_id: UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    service = VideoService(db)
+    video = await service.get_video(video_id, user.user_id)
+
+    if video.transcript_status != "failed":
+        from fastapi import HTTPException
+        raise HTTPException(
+            status_code=400,
+            detail=f"Transcript retry only allowed when status is 'failed', current: '{video.transcript_status}'",
+        )
+
+    from app.workers.worker import enqueue_transcript_retry
+    await enqueue_transcript_retry(str(video_id))
+
+    return ApiResponse(data={"success": True, "message": "Transcript retry enqueued"})
+
+
+@router.get("/{video_id}/transcript", response_model=ApiResponse[TranscriptResponse])
+async def get_transcript(
+    video_id: UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    service = VideoService(db)
+    video = await service.get_video(video_id, user.user_id)
+
+    if not video.has_transcript:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="No transcript available for this video")
+
+    from sqlalchemy import select
+    from app.models.transcript import TranscriptSegment
+    result = await db.execute(
+        select(TranscriptSegment)
+        .where(TranscriptSegment.video_id == video_id)
+        .order_by(TranscriptSegment.segment_index)
+    )
+    segments = result.scalars().all()
+
+    return ApiResponse(data=TranscriptResponse(
+        segments=[TranscriptSegmentResponse.model_validate(s) for s in segments],
+        language=video.transcript_language,
+        total_segments=len(segments),
+    ))
 
 
 @router.get("/{video_id}/frames", response_model=ApiResponse[FrameListResponse])

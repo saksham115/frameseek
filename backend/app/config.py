@@ -32,6 +32,11 @@ class Settings(BaseSettings):
     STORAGE_BASE_PATH: str = "./storage"
     MAX_UPLOAD_SIZE_MB: int = 500
 
+    # Whisper
+    WHISPER_MODEL_SIZE: str = "small"
+    WHISPER_DEVICE: str = "cpu"
+    WHISPER_LANGUAGE: str | None = None  # None = auto-detect
+
     # Server
     HOST: str = "0.0.0.0"
     PORT: int = 8000

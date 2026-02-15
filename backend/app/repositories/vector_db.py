@@ -54,18 +54,25 @@ class VectorDB:
 
     def search(
         self, user_id: str, query_vector: list[float], top_k: int = 20,
-        video_ids: list[str] | None = None, min_score: float = 0.05
+        video_ids: list[str] | None = None, min_score: float = 0.05,
+        source_type_filter: str | None = None,
     ) -> list[SearchResult]:
         collection_name = self._collection_name(user_id)
         collections = [c.name for c in self.client.get_collections().collections]
         if collection_name not in collections:
             return []
 
-        query_filter = None
+        must_conditions = []
         if video_ids:
-            query_filter = Filter(
-                must=[FieldCondition(key="video_id", match=MatchValue(value=vid)) for vid in video_ids]
+            must_conditions.extend(
+                [FieldCondition(key="video_id", match=MatchValue(value=vid)) for vid in video_ids]
             )
+        if source_type_filter:
+            must_conditions.append(
+                FieldCondition(key="source_type", match=MatchValue(value=source_type_filter))
+            )
+
+        query_filter = Filter(must=must_conditions) if must_conditions else None
 
         results = self.client.query_points(
             collection_name=collection_name,

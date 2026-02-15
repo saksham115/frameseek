@@ -4,7 +4,7 @@ from arq import create_pool
 from arq.connections import RedisSettings
 
 from app.config import settings
-from app.workers.video_processor import process_video
+from app.workers.video_processor import process_video, transcribe_video_standalone
 
 logger = logging.getLogger(__name__)
 
@@ -26,15 +26,28 @@ async def process_video_task(ctx, job_id: str):
     logger.info(f"Completed video processing job: {job_id}")
 
 
+async def transcribe_video_task(ctx, video_id: str):
+    """ARQ task for re-running transcription + transcript embedding on a video."""
+    logger.info(f"Starting transcript retry for video: {video_id}")
+    await transcribe_video_standalone(video_id)
+    logger.info(f"Completed transcript retry for video: {video_id}")
+
+
 async def enqueue_job(job_id: str):
     """Enqueue a video processing job."""
     redis = await create_pool(get_redis_settings())
     await redis.enqueue_job("process_video_task", job_id)
 
 
+async def enqueue_transcript_retry(video_id: str):
+    """Enqueue a transcript retry job."""
+    redis = await create_pool(get_redis_settings())
+    await redis.enqueue_job("transcribe_video_task", video_id)
+
+
 class WorkerSettings:
     """ARQ worker settings."""
-    functions = [process_video_task]
+    functions = [process_video_task, transcribe_video_task]
     redis_settings = get_redis_settings()
     max_jobs = 3
     job_timeout = 3600  # 1 hour

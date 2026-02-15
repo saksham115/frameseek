@@ -31,6 +31,10 @@ class SearchService:
         # Generate query embedding
         query_vector = await self.embedding_service.generate_text_embedding(request.query)
 
+        # Map source_filter to Qdrant source_type values
+        source_filter_map = {"visual": "local", "audio": "transcript", "all": None}
+        source_type_filter = source_filter_map.get(request.source_filter)
+
         # Search Qdrant
         video_id_strs = [str(v) for v in request.video_ids] if request.video_ids else None
         raw_results = vector_db.search(
@@ -39,15 +43,21 @@ class SearchService:
             top_k=request.top_k,
             video_ids=video_id_strs,
             min_score=request.min_score,
+            source_type_filter=source_type_filter,
         )
 
-        # Enrich results with video titles
+        # Enrich results with video titles and transcript data
         results = []
         for r in raw_results:
             video_title = r.payload.get("video_title", "Unknown")
             frame_path = r.payload.get("frame_path", "")
-            results.append(SearchResultItem(
-                frame_id=r.frame_id,
+            source_type = r.payload.get("source_type", "local")
+
+            # For transcript results, use segment_id as frame_id (or frame_id from payload)
+            frame_id = r.payload.get("frame_id") or r.frame_id
+
+            item = SearchResultItem(
+                frame_id=frame_id,
                 video_id=r.video_id,
                 video_title=video_title,
                 timestamp_seconds=r.timestamp,
@@ -55,8 +65,17 @@ class SearchService:
                 score=round(r.score, 4),
                 frame_url=f"/storage/frames/{frame_path}" if frame_path else "",
                 thumbnail_url=r.payload.get("thumbnail_path"),
-                source_type=r.payload.get("source_type", "local"),
-            ))
+                source_type=source_type,
+            )
+
+            # Populate transcript-specific fields
+            if source_type == "transcript":
+                item.transcript_text = r.payload.get("transcript_text")
+                item.segment_start = r.payload.get("segment_start")
+                item.segment_end = r.payload.get("segment_end")
+                item.segment_id = r.payload.get("segment_id")
+
+            results.append(item)
 
         search_time_ms = int((time.time() - start_time) * 1000)
 
