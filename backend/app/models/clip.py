@@ -24,6 +24,7 @@ class Clip(Base):
 
     file_path: Mapped[str | None] = mapped_column(String(1000))
     file_size_bytes: Mapped[int | None] = mapped_column(BigInteger)
+    gcs_path: Mapped[str | None] = mapped_column(String(1000))
 
     source_timestamp: Mapped[Decimal | None] = mapped_column(Numeric)
     source_frame_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))

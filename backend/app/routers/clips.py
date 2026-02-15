@@ -12,6 +12,8 @@ from app.models.user import User
 from app.schemas.clip import ClipCreateRequest, ClipListResponse, ClipResponse
 from app.schemas.common import ApiResponse, Pagination
 from app.services.clip_service import ClipService
+from app.utils.gcs_client import GCSClient
+from app.utils.url_helpers import resolve_storage_url
 
 router = APIRouter()
 
@@ -20,19 +22,18 @@ def _to_clip_response(clip, video_title: str | None = None) -> ClipResponse:
     resp = ClipResponse.model_validate(clip)
     resp.video_title = video_title
 
-    if clip.file_path:
-        try:
-            storage_root = Path(settings.STORAGE_BASE_PATH).resolve()
-            file_abs = Path(clip.file_path).resolve()
-            rel = file_abs.relative_to(storage_root)
-            resp.clip_url = f"/storage/{rel}"
-        except (ValueError, RuntimeError):
-            pass
+    # Clip URL (signed GCS or local /storage/)
+    resp.clip_url = resolve_storage_url(clip.file_path, clip.gcs_path)
 
-    # Thumbnail lives alongside clip file
-    thumb_path = Path(settings.STORAGE_BASE_PATH).resolve() / "clips" / str(clip.clip_id) / "thumbnail.jpg"
-    if thumb_path.exists():
-        resp.thumbnail_url = f"/storage/clips/{clip.clip_id}/thumbnail.jpg"
+    # Thumbnail — GCS first when enabled, local fallback
+    if clip.gcs_path and GCSClient.is_enabled():
+        resp.thumbnail_url = GCSClient.get().generate_signed_url(
+            f"clips/{clip.clip_id}/thumbnail.jpg"
+        )
+    else:
+        thumb_path = Path(settings.STORAGE_BASE_PATH).resolve() / "clips" / str(clip.clip_id) / "thumbnail.jpg"
+        if thumb_path.exists():
+            resp.thumbnail_url = f"/storage/clips/{clip.clip_id}/thumbnail.jpg"
 
     return resp
 

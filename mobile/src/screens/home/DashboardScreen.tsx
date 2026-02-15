@@ -6,8 +6,8 @@ import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTheme } from '../../hooks/useTheme';
 import { BorderRadius, FontFamily, FontSize, Spacing } from '../../constants/theme';
-import { STORAGE_BASE_URL } from '../../constants/config';
 import { useAuthStore } from '../../store/slices/authSlice';
+import { resolveMediaUrl } from '../../utils/url';
 import { apiClient } from '../../services/api';
 import SearchBar from '../../components/search/SearchBar';
 import FAB from '../../components/common/FAB';
@@ -78,8 +78,8 @@ export default function DashboardScreen() {
                   style={[styles.carouselCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
                 >
                   <View style={[styles.carouselThumb, { backgroundColor: colors.surfaceRaised }]}>
-                    {(item.thumbnail_url || item.thumbnail_uri) ? (
-                      <Image source={{ uri: item.thumbnail_url ? `${STORAGE_BASE_URL}${item.thumbnail_url.replace('/storage', '')}` : item.thumbnail_uri! }} style={styles.carouselThumbImage} />
+                    {item.thumbnail_url ? (
+                      <Image source={{ uri: resolveMediaUrl(item.thumbnail_url)! }} style={styles.carouselThumbImage} />
                     ) : (
                       <Ionicons name="videocam" size={28} color={colors.textDim} />
                     )}
@@ -112,7 +112,7 @@ export default function DashboardScreen() {
                 >
                   <View style={[styles.carouselThumb, { backgroundColor: colors.surfaceRaised }]}>
                     {clip.thumbnail_url ? (
-                      <Image source={{ uri: `${STORAGE_BASE_URL}${clip.thumbnail_url.replace('/storage', '')}` }} style={styles.carouselThumbImage} />
+                      <Image source={{ uri: resolveMediaUrl(clip.thumbnail_url)! }} style={styles.carouselThumbImage} />
                     ) : (
                       <Ionicons name="film-outline" size={28} color={colors.amber} />
                     )}

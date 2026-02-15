@@ -11,6 +11,7 @@ from app.repositories.vector_db import vector_db
 from app.repositories.video_repo import VideoRepository
 from app.services.clip_service import ClipService
 from app.services.storage_service import StorageService
+from app.utils.gcs_client import GCSClient
 from app.utils.video_metadata import extract_metadata
 
 
@@ -62,10 +63,21 @@ class VideoService:
         # Extract metadata
         metadata = extract_metadata(str(file_path))
 
+        # Upload to GCS if enabled
+        gcs_path = None
+        gcs_bucket = None
+        if GCSClient.is_enabled():
+            gcs = GCSClient.get()
+            gcs_path = f"videos/{user_id}/{video.video_id}/original{ext}"
+            gcs.upload_file(file_path, gcs_path)
+            gcs_bucket = settings.GCS_BUCKET_NAME
+
         # Update video record
         await self.repo.update(
             video,
             file_path=str(file_path),
+            gcs_path=gcs_path,
+            gcs_bucket=gcs_bucket,
             duration_seconds=metadata.duration_seconds,
             fps=metadata.fps,
             width=metadata.width,
@@ -113,6 +125,12 @@ class VideoService:
         frames_dir = Path(settings.STORAGE_BASE_PATH) / "frames" / str(video_id)
         if frames_dir.exists():
             shutil.rmtree(frames_dir, ignore_errors=True)
+
+        # Delete from GCS
+        if GCSClient.is_enabled() and video.gcs_path:
+            gcs = GCSClient.get()
+            gcs.delete_prefix(f"videos/{video.user_id}/{video_id}/")
+            gcs.delete_prefix(f"frames/{video_id}/")
 
         # Update storage usage (subtract file size)
         await self.storage_service.update_storage_used(user_id, -(video.file_size_bytes or 0))

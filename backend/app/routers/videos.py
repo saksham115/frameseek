@@ -24,6 +24,8 @@ from app.schemas.video import (
 )
 from app.services.job_service import JobService
 from app.services.video_service import VideoService
+from app.utils.gcs_client import GCSClient
+from app.utils.url_helpers import resolve_storage_url
 
 router = APIRouter()
 
@@ -32,21 +34,19 @@ def _to_video_response(video) -> VideoResponse:
     """Build VideoResponse with server-side video_url and thumbnail_url."""
     resp = VideoResponse.model_validate(video)
 
-    # Compute server-side video URL from file_path
-    if video.file_path:
-        try:
-            storage_root = Path(settings.STORAGE_BASE_PATH).resolve()
-            file_abs = Path(video.file_path).resolve()
-            rel = file_abs.relative_to(storage_root)
-            resp.video_url = f"/storage/{rel}"
-        except (ValueError, RuntimeError):
-            pass
+    # Compute video URL (signed GCS URL or local /storage/ path)
+    resp.video_url = resolve_storage_url(video.file_path, video.gcs_path)
 
-    # Compute thumbnail URL: first extracted frame thumbnail
+    # Compute thumbnail URL — GCS first when enabled, local fallback
     if video.video_id:
-        thumb_path = Path(settings.STORAGE_BASE_PATH).resolve() / "frames" / str(video.video_id) / "thumb_000000.jpg"
-        if thumb_path.exists():
-            resp.thumbnail_url = f"/storage/frames/{video.video_id}/thumb_000000.jpg"
+        if video.gcs_path and GCSClient.is_enabled():
+            resp.thumbnail_url = GCSClient.get().generate_signed_url(
+                f"frames/{video.video_id}/thumb_000000.jpg"
+            )
+        else:
+            thumb_path = Path(settings.STORAGE_BASE_PATH).resolve() / "frames" / str(video.video_id) / "thumb_000000.jpg"
+            if thumb_path.exists():
+                resp.thumbnail_url = f"/storage/frames/{video.video_id}/thumb_000000.jpg"
 
     return resp
 

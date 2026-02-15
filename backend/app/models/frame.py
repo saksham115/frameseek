@@ -23,7 +23,7 @@ class Frame(Base):
     timestamp_seconds: Mapped[Decimal] = mapped_column(nullable=False)
 
     # Storage
-    frame_path: Mapped[str] = mapped_column(String(1000), nullable=False)
+    frame_path: Mapped[str | None] = mapped_column(String(1000))
     gcs_path: Mapped[str | None] = mapped_column(String(1000))
     thumbnail_path: Mapped[str | None] = mapped_column(String(1000))
 

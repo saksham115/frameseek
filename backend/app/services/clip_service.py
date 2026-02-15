@@ -1,6 +1,8 @@
 import asyncio
+import os
 import shutil
 import subprocess
+import tempfile
 from decimal import Decimal
 from pathlib import Path
 from uuid import UUID
@@ -12,6 +14,7 @@ from app.config import settings
 from app.repositories.clip_repo import ClipRepository
 from app.repositories.video_repo import VideoRepository
 from app.services.storage_service import StorageService
+from app.utils.gcs_client import GCSClient
 
 
 MAX_CLIP_DURATION = 120  # seconds
@@ -53,6 +56,18 @@ class ClipService:
             source_frame_id=source_frame_id,
         )
 
+        # Resolve video source — download from GCS if local file is gone
+        video_path = video.file_path
+        tmp_download_dir = None
+        local_missing = not video_path or not Path(video_path).exists()
+        if local_missing and GCSClient.is_enabled() and video.gcs_path:
+            tmp_download_dir = tempfile.mkdtemp()
+            ext = Path(video.file_path).suffix if video.file_path else ".mp4"
+            video_path = os.path.join(tmp_download_dir, f"source_video{ext}")
+            GCSClient.get().download_file(video.gcs_path, video_path)
+        elif local_missing:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video file not available")
+
         # Prepare output path
         clip_dir = Path(settings.STORAGE_BASE_PATH) / "clips" / str(clip.clip_id)
         clip_dir.mkdir(parents=True, exist_ok=True)
@@ -60,12 +75,10 @@ class ClipService:
 
         # Run ffmpeg to extract clip
         try:
-            # Re-encode for frame-accurate cuts (-ss before -i for fast seek,
-            # then re-encode to cut at exact timestamps, not keyframes)
             cmd = [
                 "ffmpeg", "-y",
                 "-ss", str(start_time),
-                "-i", video.file_path,
+                "-i", video_path,
                 "-t", str(duration),
                 "-c:v", "libx264", "-preset", "ultrafast",
                 "-c:a", "aac",
@@ -77,8 +90,14 @@ class ClipService:
         except Exception:
             # Cleanup on failure
             shutil.rmtree(clip_dir, ignore_errors=True)
+            if tmp_download_dir:
+                shutil.rmtree(tmp_download_dir, ignore_errors=True)
             await self.repo.delete(clip)
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to generate clip")
+        finally:
+            # Clean up downloaded source video
+            if tmp_download_dir:
+                shutil.rmtree(tmp_download_dir, ignore_errors=True)
 
         # Generate thumbnail from middle of clip
         thumb_path = clip_dir / "thumbnail.jpg"
@@ -97,13 +116,30 @@ class ClipService:
         except Exception:
             pass  # Thumbnail is optional, don't fail clip creation
 
-        # Update clip with file info
+        # Upload to GCS if enabled
+        gcs_path = None
+        if GCSClient.is_enabled():
+            gcs = GCSClient.get()
+            gcs_path = f"clips/{clip.clip_id}/clip.mp4"
+            gcs.upload_file(output_path, gcs_path, content_type="video/mp4")
+            if thumb_path.exists():
+                gcs.upload_file(thumb_path, f"clips/{clip.clip_id}/thumbnail.jpg", content_type="image/jpeg")
+
+        # Get file size before potential cleanup
         file_size = output_path.stat().st_size
+
+        # Update clip with file info
         await self.repo.update(
             clip,
             file_path=str(output_path),
             file_size_bytes=file_size,
+            gcs_path=gcs_path,
         )
+
+        # Clean up local clip files when GCS is the source of truth
+        if GCSClient.is_enabled() and gcs_path:
+            shutil.rmtree(clip_dir, ignore_errors=True)
+            await self.repo.update(clip, file_path=None)
 
         # Update storage quota
         await self.storage_service.update_storage_used(user_id, file_size)
@@ -135,6 +171,10 @@ class ClipService:
             if clip_dir.exists():
                 shutil.rmtree(clip_dir, ignore_errors=True)
 
+        # Delete from GCS
+        if GCSClient.is_enabled() and clip.gcs_path:
+            GCSClient.get().delete_prefix(f"clips/{clip_id}/")
+
         # Update storage quota
         if clip.file_size_bytes:
             await self.storage_service.update_storage_used(user_id, -clip.file_size_bytes)
@@ -150,6 +190,8 @@ class ClipService:
                 clip_dir = Path(clip.file_path).parent
                 if clip_dir.exists():
                     shutil.rmtree(clip_dir, ignore_errors=True)
+            if GCSClient.is_enabled() and clip.gcs_path:
+                GCSClient.get().delete_prefix(f"clips/{clip.clip_id}/")
             if clip.file_size_bytes:
                 total_size += clip.file_size_bytes
         if total_size > 0:

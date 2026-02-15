@@ -32,6 +32,10 @@ class Settings(BaseSettings):
     STORAGE_BASE_PATH: str = "./storage"
     MAX_UPLOAD_SIZE_MB: int = 500
 
+    # Google Cloud Storage
+    GCS_BUCKET_NAME: str = ""  # empty = local-only (dev mode)
+    GCS_SIGNED_URL_EXPIRY_MINUTES: int = 60
+
     # Whisper
     WHISPER_MODEL_SIZE: str = "small"
     WHISPER_DEVICE: str = "cpu"

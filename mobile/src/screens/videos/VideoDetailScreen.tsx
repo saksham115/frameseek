@@ -5,8 +5,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../hooks/useTheme';
 import { FontFamily, FontSize, Spacing, BorderRadius } from '../../constants/theme';
 import { videosApi, searchApi, clipsApi } from '../../services/api';
-import { STORAGE_BASE_URL } from '../../constants/config';
 import Button from '../../components/common/Button';
+import { resolveMediaUrl } from '../../utils/url';
 import Badge from '../../components/common/Badge';
 import SearchBar from '../../components/search/SearchBar';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
@@ -147,8 +147,7 @@ export default function VideoDetailScreen({ route, navigation }: VideoDetailScre
   };
 
   const getVideoUri = () => {
-    if (video?.video_url) return `${STORAGE_BASE_URL}${video.video_url.replace('/storage', '')}`;
-    if (video?.local_uri) return video.local_uri;
+    if (video?.video_url) return resolveMediaUrl(video.video_url) ?? '';
     return '';
   };
 
@@ -312,12 +311,12 @@ export default function VideoDetailScreen({ route, navigation }: VideoDetailScre
         </View>
       )}
 
-      {/* Video player — prefer server URL (survives app/server restart) over local_uri (may be stale) */}
+      {/* Video player */}
       <View onLayout={(e) => { videoPlayerY.current = e.nativeEvent.layout.y; }}>
-        {(video.video_url || video.local_uri) ? (
+        {video.video_url ? (
           <Video
             ref={videoRef}
-            source={{ uri: video.video_url ? `${STORAGE_BASE_URL}${video.video_url.replace('/storage', '')}` : video.local_uri! }}
+            source={{ uri: resolveMediaUrl(video.video_url)! }}
             style={styles.videoPlayer}
             useNativeControls
             resizeMode={ResizeMode.CONTAIN}
@@ -559,7 +558,7 @@ export default function VideoDetailScreen({ route, navigation }: VideoDetailScre
                       <Ionicons name="ellipsis-vertical" size={16} color="#fff" />
                     </TouchableOpacity>
                     <Image
-                      source={{ uri: `${STORAGE_BASE_URL}/frames/${(result.frame_url || '').replace('/storage/frames/', '')}` }}
+                      source={{ uri: resolveMediaUrl(result.frame_url) ?? '' }}
                       style={styles.resultImage}
                       resizeMode="cover"
                     />
@@ -600,7 +599,7 @@ export default function VideoDetailScreen({ route, navigation }: VideoDetailScre
               >
                 <View style={[styles.clipThumb, { backgroundColor: colors.surfaceRaised }]}>
                   {clip.thumbnail_url ? (
-                    <Image source={{ uri: `${STORAGE_BASE_URL}${clip.thumbnail_url.replace('/storage', '')}` }} style={styles.clipThumbImage} resizeMode="cover" />
+                    <Image source={{ uri: resolveMediaUrl(clip.thumbnail_url)! }} style={styles.clipThumbImage} resizeMode="cover" />
                   ) : (
                     <Ionicons name="film-outline" size={24} color={colors.amber} />
                   )}

@@ -29,6 +29,7 @@ Upload videos → AI extracts frames & generates embeddings → Search by descri
 | Vector DB | Qdrant | Frame embeddings for semantic search |
 | Embeddings | Vertex AI multimodal (1408-dim) | Image & text embedding generation |
 | Frame Extraction | OpenCV + ffmpeg | Extract frames at configurable intervals |
+| Storage | Local FS / Google Cloud Storage | Hybrid file storage with signed URLs |
 | Mobile | React Native / Expo SDK 54 | Cross-platform iOS & Android app |
 | State | Zustand | Client-side state management |
 | Navigation | React Navigation 6 | Native stack + bottom tabs |
@@ -249,6 +250,59 @@ FrameSeek uses a custom design system built on brand tokens.
 | Error | `#E06060` | `#C03030` |
 
 **Fonts:** Plus Jakarta Sans (UI), JetBrains Mono (timestamps, code)
+
+## Storage
+
+FrameSeek supports two storage backends: **local filesystem** (default, for dev) and **Google Cloud Storage** (for production). Both can coexist — old files on local disk continue working while new uploads go to GCS.
+
+### Local Storage (default)
+
+No configuration needed. Files are saved to `backend/storage/` and served via a static mount at `/storage/`.
+
+### Google Cloud Storage
+
+#### 1. Create a GCS bucket
+
+```bash
+gcloud storage buckets create gs://frameseek-storage \
+  --location=us-central1 \
+  --uniform-bucket-level-access \
+  --public-access-prevention
+```
+
+#### 2. Grant the service account access
+
+```bash
+SA_EMAIL=$(python3 -c "import json; print(json.load(open('service-account.json'))['client_email'])")
+gcloud storage buckets add-iam-policy-binding gs://frameseek-storage \
+  --member="serviceAccount:${SA_EMAIL}" \
+  --role="roles/storage.objectAdmin"
+```
+
+#### 3. Configure environment variables
+
+Add to your `.env`:
+
+```env
+GCS_BUCKET_NAME=frameseek-storage
+GCS_SIGNED_URL_EXPIRY_MINUTES=60   # optional, defaults to 60
+```
+
+When `GCS_BUCKET_NAME` is set, new uploads (videos, frames, clips, thumbnails) are stored in GCS. The API returns time-limited signed URLs for file access instead of local `/storage/...` paths.
+
+#### How it works
+
+```
+API response URL construction:
+  gcs_path set?  →  signed URL (https://storage.googleapis.com/...?X-Goog-Signature=...)
+  gcs_path null? →  local relative path (/storage/videos/...)
+
+Mobile resolveMediaUrl():
+  starts with http?    →  use as-is (signed GCS URL)
+  starts with /storage →  prepend STORAGE_BASE_URL (local dev or old files)
+```
+
+The `StaticFiles` mount stays — it continues serving existing local files. No data migration is needed.
 
 ## Development Notes
 

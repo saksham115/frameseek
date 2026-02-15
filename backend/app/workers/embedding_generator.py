@@ -30,6 +30,9 @@ class EmbeddingGenerator:
             rel_path = f"{video_id}/frame_{frame['frame_index']:06d}.jpg"
             thumb_rel = f"{video_id}/thumb_{frame['frame_index']:06d}.jpg"
 
+            gcs_frame = frame.get("gcs_path")
+            gcs_thumb = gcs_frame.replace("frame_", "thumb_") if gcs_frame else None
+
             point = EmbeddingPoint(
                 id=str(frame["frame_id"]),
                 vector=embedding,
@@ -42,6 +45,8 @@ class EmbeddingGenerator:
                     "thumbnail_path": thumb_rel,
                     "video_title": video_title,
                     "source_type": "local",
+                    "gcs_frame_path": gcs_frame,
+                    "gcs_thumb_path": gcs_thumb,
                 },
             )
             points.append(point)
@@ -88,6 +93,9 @@ class EmbeddingGenerator:
                 if nearest_frame else ""
             )
 
+            gcs_frame = nearest_frame.get("gcs_path") if nearest_frame else None
+            gcs_thumb = gcs_frame.replace("frame_", "thumb_") if gcs_frame else None
+
             point_id = str(uuid.uuid4())
             point = EmbeddingPoint(
                 id=point_id,
@@ -105,6 +113,8 @@ class EmbeddingGenerator:
                     "frame_path": nearest_frame_rel,
                     "thumbnail_path": nearest_thumb_rel,
                     "frame_id": nearest_frame_id,
+                    "gcs_frame_path": gcs_frame,
+                    "gcs_thumb_path": gcs_thumb,
                 },
             )
             points.append(point)

@@ -6,8 +6,8 @@ import * as Sharing from 'expo-sharing';
 import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../../hooks/useTheme';
 import { FontFamily, FontSize, Spacing, BorderRadius } from '../../constants/theme';
-import { STORAGE_BASE_URL } from '../../constants/config';
 import { clipsApi } from '../../services/api';
+import { resolveMediaUrl } from '../../utils/url';
 import Button from '../../components/common/Button';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import EmptyState from '../../components/common/EmptyState';
@@ -33,7 +33,7 @@ export default function ClipDetailScreen({ route, navigation }: ClipDetailScreen
 
   useFocusEffect(useCallback(() => { loadData(); }, [loadData]));
 
-  const clipUri = clip?.clip_url ? `${STORAGE_BASE_URL}${clip.clip_url.replace('/storage', '')}` : null;
+  const clipUri = resolveMediaUrl(clip?.clip_url);
 
   const handleShare = async () => {
     if (!clipUri) return;

@@ -3,8 +3,8 @@ import { View, Text, Image, StyleSheet, TouchableOpacity, Dimensions } from 'rea
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../hooks/useTheme';
 import { BorderRadius, FontFamily, FontSize, Spacing } from '../../constants/theme';
-import { STORAGE_BASE_URL } from '../../constants/config';
 import TranscriptResultBadge from './TranscriptResultBadge';
+import { resolveMediaUrl } from '../../utils/url';
 import type { SearchResultData } from '../../types/api.types';
 
 interface VideoSearchCardProps {
@@ -21,7 +21,7 @@ const MAX_THUMBS = 4;
 const MAX_TRANSCRIPT_BADGES = 2;
 
 function getImageUrl(frameUrl: string) {
-  return `${STORAGE_BASE_URL}/frames/${(frameUrl || '').replace('/storage/frames/', '')}`;
+  return resolveMediaUrl(frameUrl) ?? '';
 }
 
 export default function VideoSearchCard({ videoTitle, results, onPress }: VideoSearchCardProps) {

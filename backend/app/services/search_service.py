@@ -14,7 +14,9 @@ from app.models.video import Video
 from app.repositories.vector_db import vector_db
 from app.schemas.search import SearchQuota, SearchRequest, SearchResponse, SearchResultItem
 from app.services.embedding_service import EmbeddingService
+
 from app.utils.formatting import format_duration
+from app.utils.gcs_client import GCSClient
 
 
 class SearchService:
@@ -58,6 +60,7 @@ class SearchService:
         )
 
         # Enrich results with video titles and transcript data
+        gcs_enabled = GCSClient.is_enabled()
         semantic_results: list[SearchResultItem] = []
         for r in raw_results:
             video_title = r.payload.get("video_title", "Unknown")
@@ -69,6 +72,26 @@ class SearchService:
             # 3. Tag each semantic result with match_type
             match_type = "semantic_audio" if source_type == "transcript" else "semantic_visual"
 
+            # Resolve frame/thumbnail URLs — GCS first when enabled
+            gcs_frame = r.payload.get("gcs_frame_path")
+            gcs_thumb = r.payload.get("gcs_thumb_path")
+
+            # Frame URL
+            if gcs_frame and gcs_enabled:
+                frame_url = GCSClient.get().generate_signed_url(gcs_frame)
+            elif frame_path:
+                frame_url = f"/storage/frames/{frame_path}"
+            else:
+                frame_url = ""
+
+            # Thumbnail URL
+            if gcs_thumb and gcs_enabled:
+                thumbnail_url = GCSClient.get().generate_signed_url(gcs_thumb)
+            elif r.payload.get("thumbnail_path"):
+                thumbnail_url = f"/storage/frames/{r.payload['thumbnail_path']}"
+            else:
+                thumbnail_url = None
+
             item = SearchResultItem(
                 frame_id=frame_id,
                 video_id=r.video_id,
@@ -76,8 +99,8 @@ class SearchService:
                 timestamp_seconds=r.timestamp,
                 formatted_timestamp=format_duration(r.timestamp),
                 score=round(r.score, 4),
-                frame_url=f"/storage/frames/{frame_path}" if frame_path else "",
-                thumbnail_url=r.payload.get("thumbnail_path"),
+                frame_url=frame_url,
+                thumbnail_url=thumbnail_url,
                 source_type=source_type,
                 match_type=match_type,
             )
@@ -125,7 +148,7 @@ class SearchService:
         """Search transcript_segments for exact text matches (case-insensitive)."""
         f = aliased(Frame)
         stmt = (
-            select(TranscriptSegment, f.frame_path, f.thumbnail_path, Video.title)
+            select(TranscriptSegment, f.frame_path, f.thumbnail_path, f.gcs_path, Video.title)
             .outerjoin(f, TranscriptSegment.nearest_frame_id == f.frame_id)
             .join(Video, TranscriptSegment.video_id == Video.video_id)
             .where(
@@ -142,9 +165,28 @@ class SearchService:
         result = await self.db.execute(stmt)
         rows = result.all()
 
+        gcs_enabled = GCSClient.is_enabled()
         items: list[SearchResultItem] = []
-        for seg, frame_path, thumbnail_path, video_title in rows:
+        for seg, frame_path, thumbnail_path, frame_gcs_path, video_title in rows:
             frame_id = seg.nearest_frame_id or seg.segment_id
+
+            # Resolve frame URL — GCS first when enabled
+            if frame_gcs_path and gcs_enabled:
+                frame_url = GCSClient.get().generate_signed_url(frame_gcs_path)
+            elif frame_path:
+                frame_url = f"/storage/frames/{frame_path}"
+            else:
+                frame_url = ""
+
+            # Thumbnail URL — GCS first when enabled
+            if frame_gcs_path and gcs_enabled:
+                thumb_gcs = frame_gcs_path.replace("frame_", "thumb_")
+                thumb_url = GCSClient.get().generate_signed_url(thumb_gcs)
+            elif thumbnail_path:
+                thumb_url = f"/storage/frames/{thumbnail_path}"
+            else:
+                thumb_url = None
+
             items.append(
                 SearchResultItem(
                     frame_id=frame_id,
@@ -153,8 +195,8 @@ class SearchService:
                     timestamp_seconds=float(seg.start_seconds),
                     formatted_timestamp=format_duration(float(seg.start_seconds)),
                     score=1.0,
-                    frame_url=f"/storage/frames/{frame_path}" if frame_path else "",
-                    thumbnail_url=thumbnail_path,
+                    frame_url=frame_url,
+                    thumbnail_url=thumb_url,
                     source_type="transcript",
                     match_type="exact",
                     transcript_text=seg.text,

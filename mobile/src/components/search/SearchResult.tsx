@@ -2,8 +2,8 @@ import React from 'react';
 import { View, Text, Image, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
 import { useTheme } from '../../hooks/useTheme';
 import { BorderRadius, FontFamily, FontSize, Spacing } from '../../constants/theme';
-import { STORAGE_BASE_URL } from '../../constants/config';
 import type { SearchResultData } from '../../types/api.types';
+import { resolveMediaUrl } from '../../utils/url';
 
 interface SearchResultProps {
   result: SearchResultData;
@@ -14,7 +14,7 @@ const CARD_WIDTH = (Dimensions.get('window').width - Spacing.xl * 2 - Spacing.sm
 
 export default function SearchResult({ result, onPress }: SearchResultProps) {
   const { colors } = useTheme();
-  const imageUrl = `${STORAGE_BASE_URL}/frames/${result.frame_url.replace('/storage/frames/', '')}`;
+  const imageUrl = resolveMediaUrl(result.frame_url) ?? '';
 
   return (
     <TouchableOpacity onPress={onPress} activeOpacity={0.8} style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>

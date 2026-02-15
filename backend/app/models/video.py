@@ -22,7 +22,7 @@ class Video(Base):
     original_filename: Mapped[str] = mapped_column(String(500), nullable=False)
 
     # Storage
-    file_path: Mapped[str] = mapped_column(String(1000), nullable=False)
+    file_path: Mapped[str | None] = mapped_column(String(1000))
     gcs_bucket: Mapped[str | None] = mapped_column(String(255))
     gcs_path: Mapped[str | None] = mapped_column(String(1000))
     file_size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
