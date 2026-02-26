@@ -2,9 +2,11 @@ import logging
 
 from arq import create_pool
 from arq.connections import RedisSettings
+from arq.cron import cron
 
 from app.config import settings
 from app.workers.video_processor import process_video, transcribe_video_standalone
+from app.workers.retention_cleanup import cleanup_expired_content, check_expired_subscriptions
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +35,18 @@ async def transcribe_video_task(ctx, video_id: str):
     logger.info(f"Completed transcript retry for video: {video_id}")
 
 
+async def retention_cleanup_task(ctx):
+    """ARQ cron task for deleting videos past retention period."""
+    logger.info("Starting retention cleanup")
+    await cleanup_expired_content()
+
+
+async def subscription_expiry_task(ctx):
+    """ARQ cron task for checking expired subscriptions."""
+    logger.info("Starting subscription expiry check")
+    await check_expired_subscriptions()
+
+
 async def enqueue_job(job_id: str):
     """Enqueue a video processing job."""
     redis = await create_pool(get_redis_settings())
@@ -48,6 +62,10 @@ async def enqueue_transcript_retry(video_id: str):
 class WorkerSettings:
     """ARQ worker settings."""
     functions = [process_video_task, transcribe_video_task]
+    cron_jobs = [
+        cron(retention_cleanup_task, hour=3, minute=0),  # Daily at 3 AM UTC
+        cron(subscription_expiry_task, hour={0, 6, 12, 18}),  # Every 6 hours
+    ]
     redis_settings = get_redis_settings()
     max_jobs = 3
     job_timeout = 3600  # 1 hour

@@ -20,9 +20,11 @@ class User(Base):
     plan_type: Mapped[str] = mapped_column(String(20), default="free")
     storage_used_bytes: Mapped[int] = mapped_column(BigInteger, default=0)
     storage_limit_bytes: Mapped[int] = mapped_column(BigInteger, default=5368709120)  # 5GB
-    daily_search_limit: Mapped[int] = mapped_column(Integer, default=50)
-    daily_search_count: Mapped[int] = mapped_column(Integer, default=0)
+    monthly_search_limit: Mapped[int] = mapped_column(Integer, default=20)
+    monthly_search_count: Mapped[int] = mapped_column(Integer, default=0)
     search_count_reset_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
+
+    retention_days: Mapped[int] = mapped_column(Integer, default=15)
 
     # Preferences
     auto_process_uploads: Mapped[bool] = mapped_column(Boolean, default=False)

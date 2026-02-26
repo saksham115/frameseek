@@ -41,6 +41,11 @@ class Settings(BaseSettings):
     WHISPER_DEVICE: str = "cpu"
     WHISPER_LANGUAGE: str | None = None  # None = auto-detect
 
+    # Apple IAP
+    APPLE_SHARED_SECRET: str = ""  # App Store Connect shared secret for receipt validation
+    APPLE_BUNDLE_ID: str = "in.frameseek.app"
+    APPLE_IAP_ENVIRONMENT: str = "sandbox"  # "sandbox" or "production"
+
     # Server
     HOST: str = "0.0.0.0"
     PORT: int = 8000

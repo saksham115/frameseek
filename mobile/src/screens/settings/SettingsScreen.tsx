@@ -10,6 +10,7 @@ import { useAuthStore } from '../../store/slices/authSlice';
 import { useUIStore } from '../../store/slices/uiSlice';
 import LegalContent from '../../components/legal/LegalContent';
 import FrameSeekIcon from '../../components/common/FrameSeekIcon';
+import { useSubscriptionStore } from '../../store/slices/subscriptionSlice';
 import type { AppStackParamList } from '../../types/navigation.types';
 
 export default function SettingsScreen() {
@@ -19,6 +20,7 @@ export default function SettingsScreen() {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const { themePreference, setThemePreference } = useUIStore();
+  const currentPlan = useSubscriptionStore((s) => s.currentPlan);
   const [legalType, setLegalType] = useState<'tos' | 'privacy' | null>(null);
 
   const SettingsRow = ({ icon, label, onPress, right }: {
@@ -50,7 +52,22 @@ export default function SettingsScreen() {
       <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         <SettingsRow icon="person" label={user?.name || 'Profile'} onPress={() => navigation.navigate('Profile')} />
         <SettingsRow icon="mail" label={user?.email || 'Email'} />
-        <SettingsRow icon="shield" label={`${(user?.plan_type || 'free').charAt(0).toUpperCase() + (user?.plan_type || 'free').slice(1)} Plan`} />
+        <SettingsRow
+          icon="diamond"
+          label={`${currentPlan === 'pro_max' ? 'Pro Max' : (currentPlan || 'free').charAt(0).toUpperCase() + (currentPlan || 'free').slice(1)} Plan`}
+          onPress={() =>
+            navigation.navigate(currentPlan === 'free' ? 'Paywall' : 'SubscriptionManagement')
+          }
+          right={
+            currentPlan !== 'free' ? (
+              <View style={[styles.planBadge, { backgroundColor: colors.amberDim }]}>
+                <Text style={{ color: colors.amber, fontFamily: FontFamily.semiBold, fontSize: FontSize.xs }}>
+                  {currentPlan === 'pro_max' ? 'PRO MAX' : currentPlan.toUpperCase()}
+                </Text>
+              </View>
+            ) : undefined
+          }
+        />
       </View>
 
       {/* Appearance */}
@@ -135,4 +152,5 @@ const styles = StyleSheet.create({
   },
   modalTitle: { fontFamily: FontFamily.bold, fontSize: FontSize.xl },
   modalContent: { paddingHorizontal: Spacing.xl, paddingBottom: Spacing.xxxl },
+  planBadge: { paddingHorizontal: Spacing.sm, paddingVertical: 2, borderRadius: BorderRadius.sm },
 });

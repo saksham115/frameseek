@@ -5,14 +5,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
-from app.routers import auth, videos, search, jobs, folders, analytics, storage, clips
+from app.routers import auth, videos, search, jobs, folders, analytics, storage, clips, subscriptions
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
     from app.database import engine, Base
-    from app.models import user, video, frame, job, folder, search_history
+    from app.models import user, video, frame, job, folder, search_history, subscription
 
     # Validate GCP Vertex AI configuration
     if not settings.GCP_PROJECT_ID:
@@ -58,6 +58,7 @@ app.include_router(folders.router, prefix="/api/v1/folders", tags=["folders"])
 app.include_router(analytics.router, prefix="/api/v1/analytics", tags=["analytics"])
 app.include_router(storage.router, prefix="/api/v1/storage", tags=["storage"])
 app.include_router(clips.router, prefix="/api/v1/clips", tags=["clips"])
+app.include_router(subscriptions.router, prefix="/api/v1/subscriptions", tags=["subscriptions"])
 
 
 @app.get("/health")

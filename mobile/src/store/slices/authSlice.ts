@@ -1,6 +1,7 @@
 import * as SecureStore from 'expo-secure-store';
 import { create } from 'zustand';
 import { authApi } from '../../services/api';
+import { useSubscriptionStore } from './subscriptionSlice';
 import type { UserData } from '../../types/api.types';
 
 interface AuthState {
@@ -34,6 +35,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       await SecureStore.deleteItemAsync('tos_accepted');
     }
     set({ user, isAuthenticated: true, tosAccepted });
+    useSubscriptionStore.getState().initialize();
   },
 
   logout: async () => {
@@ -45,6 +47,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     await SecureStore.deleteItemAsync('refresh_token');
     await SecureStore.deleteItemAsync('tos_accepted');
     set({ user: null, isAuthenticated: false, tosAccepted: false });
+    useSubscriptionStore.getState().reset();
   },
 
   restoreSession: async () => {
@@ -66,6 +69,7 @@ export const useAuthStore = create<AuthState>((set) => ({
           await SecureStore.setItemAsync('tos_accepted', 'true');
         }
         set({ user, tosAccepted: freshTos });
+        useSubscriptionStore.getState().initialize();
       } catch {
         // Token may be expired — interceptor will handle refresh or logout
       }

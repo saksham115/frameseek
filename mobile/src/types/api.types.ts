@@ -33,10 +33,33 @@ export interface UserData {
   user_id: string;
   email: string;
   name: string;
-  plan_type: string;
+  plan_type: PlanType;
   storage_used_bytes: number;
   storage_limit_bytes: number;
+  monthly_search_limit: number;
+  retention_days: number;
   tos_accepted_at: string | null;
+}
+
+export type PlanType = 'free' | 'pro' | 'pro_max';
+
+export interface SubscriptionDetail {
+  subscription_id: string | null;
+  status: string | null;
+  billing_period: string | null;
+  expires_at: string | null;
+  auto_renew_enabled: boolean | null;
+  cancelled_at: string | null;
+}
+
+export interface SubscriptionStatusData {
+  plan_type: PlanType;
+  plan_name: string;
+  storage_limit_bytes: number;
+  storage_used_bytes: number;
+  monthly_search_limit: number;
+  retention_days: number;
+  subscription: SubscriptionDetail | null;
 }
 
 export interface AuthData {

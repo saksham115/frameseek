@@ -19,6 +19,8 @@ export type AppStackParamList = {
   Profile: undefined;
   ClipGenerate: { videoId: string; timestamp: number; frameId?: string; videoTitle: string; videoDuration: number; videoUri: string };
   ClipDetail: { clipId: string };
+  Paywall: { source?: string } | undefined;
+  SubscriptionManagement: undefined;
 };
 
 export type RootStackParamList = {
@@ -37,3 +39,5 @@ export type UploadScreenProps = NativeStackScreenProps<AppStackParamList, 'Uploa
 export type ProfileScreenProps = NativeStackScreenProps<AppStackParamList, 'Profile'>;
 export type ClipGenerateScreenProps = NativeStackScreenProps<AppStackParamList, 'ClipGenerate'>;
 export type ClipDetailScreenProps = NativeStackScreenProps<AppStackParamList, 'ClipDetail'>;
+export type PaywallScreenProps = NativeStackScreenProps<AppStackParamList, 'Paywall'>;
+export type SubscriptionManagementScreenProps = NativeStackScreenProps<AppStackParamList, 'SubscriptionManagement'>;

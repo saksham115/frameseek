@@ -7,6 +7,8 @@ import UploadScreen from '../screens/videos/UploadScreen';
 import ProfileScreen from '../screens/settings/ProfileScreen';
 import ClipGenerateScreen from '../screens/clips/ClipGenerateScreen';
 import ClipDetailScreen from '../screens/clips/ClipDetailScreen';
+import PaywallScreen from '../screens/settings/PaywallScreen';
+import SubscriptionManagementScreen from '../screens/settings/SubscriptionManagementScreen';
 import { useTheme } from '../hooks/useTheme';
 import { FontFamily } from '../constants/theme';
 
@@ -30,6 +32,8 @@ export default function AppNavigator() {
       <Stack.Screen name="Profile" component={ProfileScreen} options={{ title: 'Profile' }} />
       <Stack.Screen name="ClipGenerate" component={ClipGenerateScreen} options={{ presentation: 'modal', title: 'Generate Clip' }} />
       <Stack.Screen name="ClipDetail" component={ClipDetailScreen} options={{ title: 'Clip' }} />
+      <Stack.Screen name="Paywall" component={PaywallScreen} options={{ presentation: 'modal', title: 'Upgrade' }} />
+      <Stack.Screen name="SubscriptionManagement" component={SubscriptionManagementScreen} options={{ title: 'Subscription' }} />
     </Stack.Navigator>
   );
 }

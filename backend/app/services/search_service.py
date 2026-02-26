@@ -27,11 +27,11 @@ class SearchService:
     async def search(self, request: SearchRequest, user_id: UUID) -> SearchResponse:
         start_time = time.time()
 
-        # Check quota
+        # Check quota (limit == -1 means unlimited)
         quota = await self.get_quota(user_id)
-        if quota.remaining <= 0:
+        if quota.limit != -1 and quota.remaining <= 0:
             from fastapi import HTTPException, status
-            raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Daily search quota exceeded")
+            raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Monthly search quota exceeded")
 
         # 1. Exact text search on transcripts (when audio results are relevant)
         exact_results: list[SearchResultItem] = []
@@ -239,19 +239,23 @@ class SearchService:
         result = await self.db.execute(select(User).where(User.user_id == user_id))
         user = result.scalar_one_or_none()
         if not user:
-            return SearchQuota(used=0, limit=50, remaining=50)
+            return SearchQuota(used=0, limit=20, remaining=20)
 
-        # Reset if needed
+        # Reset if new month
         now = datetime.now(timezone.utc)
-        if not user.search_count_reset_at or user.search_count_reset_at.date() < now.date():
-            user.daily_search_count = 0
+        if not user.search_count_reset_at or (
+            user.search_count_reset_at.year, user.search_count_reset_at.month
+        ) < (now.year, now.month):
+            user.monthly_search_count = 0
             user.search_count_reset_at = now
             await self.db.flush()
 
+        limit = user.monthly_search_limit
+
         return SearchQuota(
-            used=user.daily_search_count,
-            limit=user.daily_search_limit,
-            remaining=max(0, user.daily_search_limit - user.daily_search_count),
+            used=user.monthly_search_count,
+            limit=limit,
+            remaining=max(0, limit - user.monthly_search_count),
             resets_at=user.search_count_reset_at,
         )
 
@@ -282,5 +286,5 @@ class SearchService:
         result = await self.db.execute(select(User).where(User.user_id == user_id))
         user = result.scalar_one_or_none()
         if user:
-            user.daily_search_count = (user.daily_search_count or 0) + 1
+            user.monthly_search_count = (user.monthly_search_count or 0) + 1
             await self.db.flush()

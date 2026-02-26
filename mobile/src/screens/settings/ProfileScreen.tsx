@@ -32,7 +32,7 @@ export default function ProfileScreen() {
   const [searchQuota, setSearchQuota] = useState<SearchQuota | null>(null);
   const [storageQuota, setStorageQuota] = useState<StorageQuota | null>(null);
 
-  const planDisplay = user?.plan_type === 'pro' ? 'Pro' : user?.plan_type === 'enterprise' ? 'Enterprise' : 'Free';
+  const planDisplay = user?.plan_type === 'pro' ? 'Pro' : user?.plan_type === 'pro_max' ? 'Pro Max' : 'Free';
 
   useFocusEffect(useCallback(() => {
     const fetchData = async () => {
