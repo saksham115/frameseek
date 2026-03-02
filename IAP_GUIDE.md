@@ -340,62 +340,41 @@ source venv/bin/activate
 alembic upgrade head
 ```
 
-#### 6. Systemd Services
+#### 6. PM2 Process Manager
 
-Create service files so the API and worker start on boot and auto-restart.
-
-**API Server** — `/etc/systemd/system/frameseek-api.service`:
-
-```ini
-[Unit]
-Description=FrameSeek API
-After=network.target docker.service
-
-[Service]
-User=www-data
-WorkingDirectory=/opt/frameseek/backend
-EnvironmentFile=/opt/frameseek/backend/.env
-ExecStart=/opt/frameseek/backend/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-```
-
-**ARQ Worker** — `/etc/systemd/system/frameseek-worker.service`:
-
-```ini
-[Unit]
-Description=FrameSeek Worker
-After=network.target docker.service
-
-[Service]
-User=www-data
-WorkingDirectory=/opt/frameseek/backend
-EnvironmentFile=/opt/frameseek/backend/.env
-ExecStart=/opt/frameseek/backend/venv/bin/arq app.workers.worker.WorkerSettings
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-```
-
-Enable and start:
+PM2 manages both the API server and worker — auto-restart, log aggregation, and startup on boot.
 
 ```bash
-sudo systemctl daemon-reload
-sudo systemctl enable frameseek-api frameseek-worker
-sudo systemctl start frameseek-api frameseek-worker
+# Install PM2 globally
+npm install -g pm2
+
+# Start both processes
+cd /opt/frameseek/backend
+pm2 start ecosystem.config.js
 
 # Check status
-sudo systemctl status frameseek-api
-sudo systemctl status frameseek-worker
+pm2 status
 
-# View logs
-sudo journalctl -u frameseek-api -f
-sudo journalctl -u frameseek-worker -f
+# View logs (all processes)
+pm2 logs
+
+# View logs for a specific process
+pm2 logs frameseek-api
+pm2 logs frameseek-worker
+
+# Auto-start on server reboot
+pm2 startup
+pm2 save
+```
+
+Common PM2 commands:
+
+```bash
+pm2 restart all              # Restart everything
+pm2 restart frameseek-api    # Restart just the API
+pm2 stop frameseek-worker    # Stop the worker
+pm2 monit                    # Live CPU/memory dashboard
+pm2 flush                    # Clear all logs
 ```
 
 #### 7. Nginx Reverse Proxy + SSL
@@ -548,7 +527,7 @@ cd backend
 source venv/bin/activate
 pip install -r requirements.txt
 alembic upgrade head
-sudo systemctl restart frameseek-api frameseek-worker
+pm2 restart all
 ```
 
 ---
