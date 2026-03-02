@@ -67,18 +67,3 @@ async def apple_server_notification(
     await service.handle_apple_notification(body)
 
     return {"success": True}
-
-
-@router.post("/dev/reset", response_model=ApiResponse[SubscriptionStatusResponse])
-async def dev_reset_to_free(
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """DEV ONLY: Reset user back to free plan."""
-    if settings.APPLE_IAP_ENVIRONMENT != "local":
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    service = SubscriptionService(db)
-    await service._downgrade_to_free(user)
-    await db.commit()
-    result = await service.get_subscription_status(user.user_id)
-    return ApiResponse(data=result)

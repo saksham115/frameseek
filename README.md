@@ -166,7 +166,7 @@ All endpoints prefixed with `/api/v1/`.
 |--------|------|-------------|
 | POST | `/search` | Semantic search across all frames |
 | GET | `/search/history` | Recent search queries |
-| GET | `/search/quota` | Daily search quota status |
+| GET | `/search/quota` | Monthly search quota status |
 
 ### Jobs
 | Method | Path | Description |

@@ -4,11 +4,11 @@ const DEV_HOST = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
 
 export const API_BASE_URL = __DEV__
   ? `http://${DEV_HOST}:8000/api/v1`
-  : 'https://api.frameseek.com/api/v1';
+  : 'https://api.frameseek.in/api/v1';
 
 export const STORAGE_BASE_URL = __DEV__
   ? `http://${DEV_HOST}:8000/storage`
-  : 'https://api.frameseek.com/storage';
+  : 'https://api.frameseek.in/storage';
 
 export const SEARCH_DEBOUNCE_MS = 600;
 export const MAX_UPLOAD_SIZE_MB = 500;
