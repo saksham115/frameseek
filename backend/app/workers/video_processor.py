@@ -3,6 +3,7 @@ import logging
 import os
 import shutil
 import tempfile
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import UUID
@@ -42,6 +43,14 @@ async def process_video(job_id: str):
             return
 
         try:
+            pipeline_start = time.time()
+            vid = str(video.video_id)[:8]
+            file_size_mb = (video.file_size_bytes or 0) / (1024 ** 2)
+            logger.info(
+                f"[{vid}] ▶ Starting pipeline | video=\"{video.title}\" "
+                f"size={file_size_mb:.1f}MB job={job_id}"
+            )
+
             # Update status
             job.status = "processing"
             job.started_at = datetime.now(timezone.utc)
@@ -50,12 +59,19 @@ async def process_video(job_id: str):
             await db.commit()
 
             # Step 1: Extract frames (0 → 30%)
+            step_start = time.time()
+            logger.info(f"[{vid}] Step 1/5: Extracting frames (interval={job.frame_interval_seconds}s)")
             extractor = FrameExtractor(str(settings.storage_path / "frames"))
 
             extracted = extractor.extract_frames(
                 video_path=video.file_path,
                 video_id=str(video.video_id),
                 interval_seconds=job.frame_interval_seconds,
+            )
+
+            logger.info(
+                f"[{vid}] Step 1/5: Done — {len(extracted)} frames extracted "
+                f"in {time.time() - step_start:.1f}s"
             )
 
             job.total_frames = len(extracted)
@@ -67,6 +83,8 @@ async def process_video(job_id: str):
             # Upload frames to GCS if enabled
             frame_gcs_paths: dict[int, str] = {}
             if GCSClient.is_enabled():
+                step_start = time.time()
+                logger.info(f"[{vid}] Step 2/5: Uploading {len(extracted)} frames to GCS")
                 gcs = GCSClient.get()
                 for ef in extracted:
                     frame_gcs = f"frames/{video.video_id}/frame_{ef.frame_index:06d}.jpg"
@@ -77,8 +95,16 @@ async def process_video(job_id: str):
                     thumb_gcs = f"frames/{video.video_id}/thumb_{ef.frame_index:06d}.jpg"
                     if Path(thumb_local).exists():
                         gcs.upload_file(thumb_local, thumb_gcs, content_type="image/jpeg")
+                logger.info(
+                    f"[{vid}] Step 2/5: Done — {len(frame_gcs_paths)} frames uploaded to GCS "
+                    f"in {time.time() - step_start:.1f}s"
+                )
+            else:
+                logger.info(f"[{vid}] Step 2/5: GCS disabled, skipping upload")
 
-            # Step 2: Save frame records to DB (30 → 40%)
+            # Save frame records to DB (30 → 40%)
+            step_start = time.time()
+            logger.info(f"[{vid}] Step 2/5: Saving {len(extracted)} frame records to DB")
             frame_dicts = []
             for ef in extracted:
                 frame = Frame(
@@ -104,14 +130,25 @@ async def process_video(job_id: str):
                     "gcs_path": frame_gcs_paths.get(ef.frame_index),
                 })
 
+            logger.info(
+                f"[{vid}] Step 2/5: Done — {len(frame_dicts)} frame records saved "
+                f"in {time.time() - step_start:.1f}s"
+            )
+
             job.progress = 40
             job.current_step = "transcribing_audio"
             video.processing_progress = 40
             await db.commit()
 
             # Step 3: Transcribe audio (40 → 55%)
+            step_start = time.time()
+            logger.info(f"[{vid}] Step 3/5: Transcribing audio")
             transcript_chunks = []
             await _transcribe_audio(db, video, frame_dicts, transcript_chunks)
+            logger.info(
+                f"[{vid}] Step 3/5: Done — status={video.transcript_status}, "
+                f"{len(transcript_chunks)} chunks in {time.time() - step_start:.1f}s"
+            )
 
             job.progress = 55
             job.current_step = "generating_embeddings"
@@ -119,6 +156,8 @@ async def process_video(job_id: str):
             await db.commit()
 
             # Step 4: Generate frame embeddings (55 → 80%)
+            step_start = time.time()
+            logger.info(f"[{vid}] Step 4/5: Generating embeddings for {len(frame_dicts)} frames")
             generator = EmbeddingGenerator()
 
             stored = await generator.generate_and_store(
@@ -126,6 +165,10 @@ async def process_video(job_id: str):
                 video_id=str(video.video_id),
                 video_title=video.title,
                 frames=frame_dicts,
+            )
+            logger.info(
+                f"[{vid}] Step 4/5: Done — {stored} frame embeddings stored "
+                f"in {time.time() - step_start:.1f}s"
             )
 
             # Update embedding IDs on frame records
@@ -144,8 +187,12 @@ async def process_video(job_id: str):
             await db.commit()
 
             # Step 5: Generate transcript embeddings (80 → 100%)
+            step_start = time.time()
             transcript_stored = 0
             if video.transcript_status == "completed" and transcript_chunks:
+                logger.info(
+                    f"[{vid}] Step 5/5: Generating embeddings for {len(transcript_chunks)} transcript chunks"
+                )
                 transcript_stored = await generator.generate_and_store_transcripts(
                     user_id=str(video.user_id),
                     video_id=str(video.video_id),
@@ -153,6 +200,12 @@ async def process_video(job_id: str):
                     chunks=transcript_chunks,
                     frames=frame_dicts,
                 )
+                logger.info(
+                    f"[{vid}] Step 5/5: Done — {transcript_stored} transcript embeddings "
+                    f"in {time.time() - step_start:.1f}s"
+                )
+            else:
+                logger.info(f"[{vid}] Step 5/5: Skipped (no transcript)")
 
             # Complete
             job.status = "completed"
@@ -186,15 +239,19 @@ async def process_video(job_id: str):
                     frame.thumbnail_path = None
                 await db.commit()
 
-                logger.info(f"Job {job_id}: cleaned up local files and DB paths (GCS is source of truth)")
+                logger.info(f"[{vid}] Cleaned up local files (GCS is source of truth)")
 
+            total_time = time.time() - pipeline_start
             logger.info(
-                f"Job {job_id} completed: {len(extracted)} frames, {stored} frame embeddings, "
-                f"{transcript_stored} transcript embeddings"
+                f"[{vid}] ✓ Pipeline complete in {total_time:.1f}s | "
+                f"frames={len(extracted)} embeddings={stored} "
+                f"transcript_embeddings={transcript_stored} "
+                f"transcript={video.transcript_status}"
             )
 
         except Exception as e:
-            logger.exception(f"Job {job_id} failed: {e}")
+            total_time = time.time() - pipeline_start
+            logger.exception(f"[{vid}] ✗ Pipeline failed after {total_time:.1f}s: {e}")
             job.status = "failed"
             job.error_message = str(e)
             job.completed_at = datetime.now(timezone.utc)
