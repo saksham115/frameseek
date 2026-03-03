@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, TextInput, StyleSheet, ScrollView, Alert, Image, TouchableOpacity, Keyboard, ActionSheetIOS, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Alert, Image, TouchableOpacity, Keyboard, ActionSheetIOS, Platform } from 'react-native';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../hooks/useTheme';
@@ -28,15 +28,11 @@ export default function VideoDetailScreen({ route, navigation }: VideoDetailScre
   const [searching, setSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(!!(incomingResults && incomingResults.length > 0));
   const [selectedFrameId, setSelectedFrameId] = useState<string | null>(null);
-  const [isEditingTitle, setIsEditingTitle] = useState(false);
-  const [editTitle, setEditTitle] = useState('');
-  const [savingTitle, setSavingTitle] = useState(false);
   const [clips, setClips] = useState<ClipData[]>([]);
   const [transcriptExpanded, setTranscriptExpanded] = useState(false);
   const [transcriptSegments, setTranscriptSegments] = useState<TranscriptSegmentData[]>([]);
   const [loadingTranscript, setLoadingTranscript] = useState(false);
   const [currentPositionSec, setCurrentPositionSec] = useState(0);
-  const titleInputRef = useRef<TextInput>(null);
   const videoRef = useRef<Video>(null);
   const scrollRef = useRef<ScrollView>(null);
   const videoPlayerY = useRef(0);
@@ -237,48 +233,6 @@ export default function VideoDetailScreen({ route, navigation }: VideoDetailScre
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
-  const handleDelete = () => {
-    Alert.alert('Delete Video', 'Are you sure? This cannot be undone.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await videosApi.delete(videoId);
-            navigation.goBack();
-          } catch {}
-        },
-      },
-    ]);
-  };
-
-  const handleTitleTap = () => {
-    if (video) {
-      setEditTitle(video.title);
-      setIsEditingTitle(true);
-      setTimeout(() => titleInputRef.current?.focus(), 50);
-    }
-  };
-
-  const handleTitleSave = async () => {
-    const trimmed = editTitle.trim();
-    if (!trimmed || !video || trimmed === video.title) {
-      setIsEditingTitle(false);
-      return;
-    }
-    setSavingTitle(true);
-    try {
-      const res = await videosApi.update(videoId, { title: trimmed });
-      setVideo(res.data.data.video);
-    } catch (err: any) {
-      Alert.alert('Error', err.response?.data?.detail || 'Failed to update title');
-    } finally {
-      setSavingTitle(false);
-      setIsEditingTitle(false);
-    }
-  };
-
   if (loading) return <LoadingSpinner />;
   if (!video) return <EmptyState icon="alert-circle" title="Not found" message="Video not found" />;
 
@@ -330,27 +284,7 @@ export default function VideoDetailScreen({ route, navigation }: VideoDetailScre
 
       {/* Info */}
       <View style={styles.info}>
-        <View style={styles.titleRow}>
-          {isEditingTitle ? (
-            <TextInput
-              ref={titleInputRef}
-              value={editTitle}
-              onChangeText={setEditTitle}
-              onBlur={handleTitleSave}
-              onSubmitEditing={handleTitleSave}
-              style={[styles.titleInput, { color: colors.text, borderColor: colors.amber, flex: 1 }]}
-              returnKeyType="done"
-              maxLength={500}
-              autoFocus
-              editable={!savingTitle}
-            />
-          ) : (
-            <Text style={[styles.title, { color: colors.text, flex: 1 }]}>{video.title}</Text>
-          )}
-          <TouchableOpacity onPress={handleDelete} style={styles.iconBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-            <Ionicons name="trash-outline" size={16} color={colors.textMid} />
-          </TouchableOpacity>
-        </View>
+        <Text style={[styles.title, { color: colors.text }]}>{video.title}</Text>
         <View style={styles.metaRow}>
           <Badge label={video.status} variant={statusVariant} />
           <Text style={[styles.meta, { color: colors.textMid }]}>{formatFileSize(video.file_size_bytes)}</Text>
@@ -358,11 +292,6 @@ export default function VideoDetailScreen({ route, navigation }: VideoDetailScre
             <Text style={[styles.meta, { color: colors.textMid }]}>{video.width}x{video.height}</Text>
           )}
           <Text style={[styles.meta, { color: colors.textMid }]}>{formatTimeAgo(video.created_at)}</Text>
-          {!isEditingTitle && (
-            <TouchableOpacity onPress={handleTitleTap} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Ionicons name="pencil-outline" size={13} color={colors.textMid} />
-            </TouchableOpacity>
-          )}
         </View>
         {video.codec && (
           <Text style={[styles.codec, { color: colors.textDim }]}>Codec: {video.codec} | FPS: {Math.round(video.fps ?? 0)}</Text>
@@ -493,60 +422,31 @@ export default function VideoDetailScreen({ route, navigation }: VideoDetailScre
           )}
 
           {!searching && hasSearched && searchResults.length === 0 && (
-            <Text style={[styles.noResults, { color: colors.textMid }]}>No matching frames or audio found</Text>
+            <Text style={[styles.noResults, { color: colors.textMid }]}>No matching frames found</Text>
           )}
 
           {searchResults.length > 0 && (
             <View style={styles.resultsGrid}>
               {searchResults.map((result) => {
                 const isSelected = selectedFrameId === result.frame_id;
-                const isTranscript = result.source_type === 'transcript';
                 return (
                   <TouchableOpacity
-                    key={isTranscript ? (result.segment_id || result.frame_id) : result.frame_id}
+                    key={result.frame_id}
                     activeOpacity={0.8}
                     onPress={() => handleFrameTap(result)}
                     style={[
                       styles.resultCard,
                       {
                         backgroundColor: colors.surface,
-                        borderColor: isSelected ? colors.amber : result.match_type === 'exact' ? colors.success : isTranscript ? colors.amber + '60' : colors.border,
+                        borderColor: isSelected ? colors.amber : colors.border,
                         borderWidth: isSelected ? 2 : 1,
                       },
                     ]}
                   >
-                    {(() => {
-                      if (isSelected) {
-                        return (
-                          <View style={[styles.audioBadge, { backgroundColor: colors.amber }]}>
-                            <Ionicons name="play" size={8} color="#fff" />
-                            <Text style={styles.playingText}>Playing</Text>
-                          </View>
-                        );
-                      }
-                      if (result.match_type === 'exact') {
-                        return (
-                          <View style={[styles.audioBadge, { backgroundColor: colors.success }]}>
-                            <Ionicons name="checkmark-circle" size={8} color="#fff" />
-                            <Text style={styles.playingText}>Exact</Text>
-                          </View>
-                        );
-                      }
-                      if (result.match_type === 'semantic_audio') {
-                        return (
-                          <View style={[styles.audioBadge, { backgroundColor: colors.amber }]}>
-                            <Ionicons name="mic" size={8} color="#fff" />
-                            <Text style={styles.playingText}>Audio</Text>
-                          </View>
-                        );
-                      }
-                      return (
-                        <View style={[styles.audioBadge, { backgroundColor: '#5B8DEF' }]}>
-                          <Ionicons name="eye" size={8} color="#fff" />
-                          <Text style={styles.playingText}>Visual</Text>
-                        </View>
-                      );
-                    })()}
+                    <View style={[styles.audioBadge, { backgroundColor: isSelected ? colors.amber : '#5B8DEF' }]}>
+                      <Ionicons name={isSelected ? 'play' : 'eye'} size={8} color="#fff" />
+                      <Text style={styles.playingText}>{isSelected ? 'Playing' : 'Visual'}</Text>
+                    </View>
                     <TouchableOpacity
                       style={styles.moreBtn}
                       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -559,19 +459,9 @@ export default function VideoDetailScreen({ route, navigation }: VideoDetailScre
                       style={styles.resultImage}
                       resizeMode="cover"
                     />
-                    {isTranscript && result.transcript_text ? (
-                      <View style={[styles.transcriptSnippet, { backgroundColor: colors.amberDim }]}>
-                        <Text style={[styles.transcriptSnippetText, { color: colors.text }]} numberOfLines={2}>
-                          "{result.transcript_text}"
-                        </Text>
-                      </View>
-                    ) : null}
                     <View style={styles.resultInfo}>
                       <Text style={[styles.resultTime, { color: isSelected ? colors.amber : colors.textMid }]}>
                         {result.formatted_timestamp}
-                      </Text>
-                      <Text style={[styles.resultScore, { color: colors.textDim }]}>
-                        {Math.round(result.score * 100)}% match
                       </Text>
                     </View>
                   </TouchableOpacity>
@@ -634,16 +524,7 @@ const styles = StyleSheet.create({
   },
   durationOverlay: { fontFamily: FontFamily.mono, fontSize: FontSize.sm, marginTop: Spacing.sm },
   info: { padding: Spacing.xl, gap: Spacing.sm },
-  titleRow: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.sm },
   title: { fontFamily: FontFamily.bold, fontSize: FontSize.xl },
-  titleInput: {
-    fontFamily: FontFamily.bold,
-    fontSize: FontSize.xl,
-    borderBottomWidth: 1.5,
-    paddingVertical: 2,
-    paddingHorizontal: 0,
-  },
-  iconBtn: { paddingTop: 4 },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, flexWrap: 'wrap' },
   meta: { fontFamily: FontFamily.regular, fontSize: FontSize.xs },
   codec: { fontFamily: FontFamily.mono, fontSize: FontSize.xs },
@@ -680,15 +561,6 @@ const styles = StyleSheet.create({
     height: 90,
     backgroundColor: '#1A1A1E',
   },
-  transcriptSnippet: {
-    paddingHorizontal: Spacing.xs,
-    paddingVertical: 4,
-  },
-  transcriptSnippetText: {
-    fontFamily: FontFamily.regular,
-    fontSize: 10,
-    fontStyle: 'italic',
-  },
   resultInfo: {
     padding: Spacing.xs,
     flexDirection: 'row',
@@ -696,7 +568,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   resultTime: { fontFamily: FontFamily.mono, fontSize: FontSize.xs },
-  resultScore: { fontFamily: FontFamily.regular, fontSize: 10 },
   transcriptSection: { paddingHorizontal: Spacing.xl, paddingBottom: Spacing.md, gap: Spacing.sm },
   transcriptHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   transcriptHeader: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },

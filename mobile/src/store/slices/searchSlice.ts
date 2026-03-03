@@ -2,8 +2,6 @@ import { create } from 'zustand';
 import { searchApi } from '../../services/api';
 import type { SearchHistoryItem, SearchResultData } from '../../types/api.types';
 
-type SourceFilter = 'all' | 'visual' | 'audio';
-
 interface SearchState {
   query: string;
   results: SearchResultData[];
@@ -11,10 +9,8 @@ interface SearchState {
   searchTimeMs: number;
   history: SearchHistoryItem[];
   error: string | null;
-  sourceFilter: SourceFilter;
 
   setQuery: (query: string) => void;
-  setSourceFilter: (filter: SourceFilter) => void;
   performSearch: (query: string) => Promise<void>;
   fetchHistory: () => Promise<void>;
   clearResults: () => void;
@@ -29,11 +25,8 @@ export const useSearchStore = create<SearchState>((set, get) => ({
   searchTimeMs: 0,
   history: [],
   error: null,
-  sourceFilter: 'all',
 
   setQuery: (query) => set({ query }),
-
-  setSourceFilter: (sourceFilter) => set({ sourceFilter }),
 
   performSearch: async (query) => {
     if (!query.trim() || query.trim().length < 3) {
@@ -43,11 +36,9 @@ export const useSearchStore = create<SearchState>((set, get) => ({
     const requestId = ++searchCounter;
     set({ isSearching: true, error: null });
     try {
-      const { sourceFilter } = get();
       const response = await searchApi.search({
         query,
         top_k: 20,
-        source_filter: sourceFilter,
       });
       // Only apply results if this is still the latest request
       if (requestId === searchCounter) {

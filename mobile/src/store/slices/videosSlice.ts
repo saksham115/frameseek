@@ -14,6 +14,7 @@ interface VideosState {
   setViewMode: (mode: 'list' | 'grid') => void;
   setActiveFilter: (filter: 'all' | 'processing' | 'ready') => void;
   deleteVideo: (videoId: string) => Promise<void>;
+  renameVideo: (videoId: string, title: string) => Promise<void>;
 }
 
 export const useVideosStore = create<VideosState>((set, get) => ({
@@ -50,6 +51,14 @@ export const useVideosStore = create<VideosState>((set, get) => ({
     await videosApi.delete(videoId);
     set((state) => ({
       videos: state.videos.filter((v) => v.video_id !== videoId),
+    }));
+  },
+
+  renameVideo: async (videoId, title) => {
+    const res = await videosApi.update(videoId, { title });
+    const updated = res.data.data.video;
+    set((state) => ({
+      videos: state.videos.map((v) => v.video_id === videoId ? { ...v, title: updated.title } : v),
     }));
   },
 }));

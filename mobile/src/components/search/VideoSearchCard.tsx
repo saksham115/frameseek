@@ -1,9 +1,8 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import { View, Text, Image, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../hooks/useTheme';
 import { BorderRadius, FontFamily, FontSize, Spacing } from '../../constants/theme';
-import TranscriptResultBadge from './TranscriptResultBadge';
 import { resolveMediaUrl } from '../../utils/url';
 import type { SearchResultData } from '../../types/api.types';
 
@@ -18,7 +17,6 @@ const CARD_PADDING = Spacing.xl;
 const CARD_WIDTH = SCREEN_WIDTH - CARD_PADDING * 2;
 const THUMB_SIZE = 64;
 const MAX_THUMBS = 4;
-const MAX_TRANSCRIPT_BADGES = 2;
 
 function getImageUrl(frameUrl: string) {
   return resolveMediaUrl(frameUrl) ?? '';
@@ -27,36 +25,9 @@ function getImageUrl(frameUrl: string) {
 export default function VideoSearchCard({ videoTitle, results, onPress }: VideoSearchCardProps) {
   const { colors } = useTheme();
 
-  const { frameResults, transcriptResults } = useMemo(() => {
-    const frame: SearchResultData[] = [];
-    const transcript: SearchResultData[] = [];
-    for (const r of results) {
-      if (r.source_type === 'transcript') {
-        transcript.push(r);
-      } else {
-        frame.push(r);
-      }
-    }
-    // Sort transcript: exact matches first, then by score desc
-    transcript.sort((a, b) => {
-      const aExact = a.match_type === 'exact' ? 1 : 0;
-      const bExact = b.match_type === 'exact' ? 1 : 0;
-      if (aExact !== bExact) return bExact - aExact;
-      return b.score - a.score;
-    });
-    return { frameResults: frame, transcriptResults: transcript };
-  }, [results]);
-
-  const displayResults = frameResults.slice(0, MAX_THUMBS);
-  const remaining = frameResults.length - MAX_THUMBS;
-  const topScore = Math.round(results[0].score * 100);
-
-  const exactCount = transcriptResults.filter((r) => r.match_type === 'exact').length;
-  const audioCount = transcriptResults.filter((r) => r.match_type !== 'exact').length;
-  const matchParts = [`${results.length} ${results.length === 1 ? 'match' : 'matches'}`];
-  if (exactCount > 0) matchParts.push(`${exactCount} exact`);
-  if (audioCount > 0) matchParts.push(`${audioCount} audio`);
-  const matchText = matchParts.join(' · ');
+  const displayResults = results.slice(0, MAX_THUMBS);
+  const remaining = results.length - MAX_THUMBS;
+  const matchText = `${results.length} ${results.length === 1 ? 'match' : 'matches'}`;
 
   return (
     <TouchableOpacity
@@ -71,7 +42,7 @@ export default function VideoSearchCard({ videoTitle, results, onPress }: VideoS
             {videoTitle}
           </Text>
           <Text style={[styles.meta, { color: colors.textMid }]}>
-            {matchText} · up to {topScore}%
+            {matchText}
           </Text>
         </View>
         <Ionicons name="chevron-forward" size={18} color={colors.textDim} />
@@ -108,21 +79,6 @@ export default function VideoSearchCard({ videoTitle, results, onPress }: VideoS
               </View>
             </View>
           )}
-        </View>
-      )}
-
-      {/* Transcript result badges */}
-      {transcriptResults.length > 0 && (
-        <View style={styles.transcriptSection}>
-          {transcriptResults.slice(0, MAX_TRANSCRIPT_BADGES).map((result) => (
-            <TranscriptResultBadge
-              key={result.segment_id || result.frame_id}
-              text={result.transcript_text || ''}
-              timestamp={result.formatted_timestamp}
-              score={result.score}
-              matchType={result.match_type}
-            />
-          ))}
         </View>
       )}
     </TouchableOpacity>
@@ -189,8 +145,5 @@ const styles = StyleSheet.create({
   moreText: {
     fontFamily: FontFamily.semiBold,
     fontSize: FontSize.sm,
-  },
-  transcriptSection: {
-    gap: Spacing.xs,
   },
 });

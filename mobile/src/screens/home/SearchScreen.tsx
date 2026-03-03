@@ -6,7 +6,6 @@ import { useTheme } from '../../hooks/useTheme';
 import { useSearchStore } from '../../store/slices/searchSlice';
 import { FontFamily, FontSize, Spacing } from '../../constants/theme';
 import SearchBar from '../../components/search/SearchBar';
-import FilterChips from '../../components/search/FilterChips';
 import VideoSearchCard from '../../components/search/VideoSearchCard';
 import EmptyState from '../../components/common/EmptyState';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
@@ -22,25 +21,12 @@ interface GroupedVideo {
   topScore: number;
 }
 
-const SOURCE_FILTERS = ['All', 'Visual', 'Audio'];
-const filterValueMap: Record<string, 'all' | 'visual' | 'audio'> = {
-  All: 'all',
-  Visual: 'visual',
-  Audio: 'audio',
-};
-const filterLabelMap: Record<string, string> = {
-  all: 'All',
-  visual: 'Visual',
-  audio: 'Audio',
-};
-
 export default function SearchScreen() {
   const { colors } = useTheme();
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
   const {
     query, setQuery, results, isSearching, searchTimeMs,
     performSearch, clearResults, history, fetchHistory,
-    sourceFilter, setSourceFilter,
   } = useSearchStore();
   useEffect(() => {
     fetchHistory();
@@ -50,17 +36,7 @@ export default function SearchScreen() {
     if (text.trim().length >= 2) {
       performSearch(text);
     }
-  }, [performSearch, sourceFilter]);
-
-  const handleFilterSelect = useCallback((label: string) => {
-    const value = filterValueMap[label] || 'all';
-    setSourceFilter(value);
-    // Re-search with new filter if there's an active query
-    if (query.trim().length >= 2) {
-      // Small delay to let the store update sourceFilter
-      setTimeout(() => performSearch(query), 0);
-    }
-  }, [setSourceFilter, query, performSearch]);
+  }, [performSearch]);
 
   // Group results by video
   const groupedVideos = useMemo<GroupedVideo[]>(() => {
@@ -104,11 +80,6 @@ export default function SearchScreen() {
           autoFocus
           onClear={clearResults}
         />
-        <FilterChips
-          filters={SOURCE_FILTERS}
-          activeFilter={filterLabelMap[sourceFilter]}
-          onSelect={handleFilterSelect}
-        />
         {results.length > 0 && (
           <Text style={[styles.meta, { color: colors.textMid }]}>
             {results.length} results across {groupedVideos.length} {groupedVideos.length === 1 ? 'video' : 'videos'} in {(searchTimeMs / 1000).toFixed(1)}s ({searchTimeMs}ms)
@@ -144,7 +115,7 @@ export default function SearchScreen() {
       ) : query.length > 0 && !isSearching ? (
         <EmptyState icon="search" title="No results" message={`No frames match "${query}"`} />
       ) : (
-        <EmptyState icon="search" title="Search your videos" message="Describe what you're looking for — matches visuals and spoken words" />
+        <EmptyState icon="search" title="Search your videos" message="Describe what you're looking for" />
       )}
     </View>
   );

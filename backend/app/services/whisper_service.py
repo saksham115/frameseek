@@ -95,6 +95,13 @@ class WhisperService:
             transcribe_kwargs["language"] = settings.WHISPER_LANGUAGE
 
         result = model.transcribe(audio_path, **transcribe_kwargs)
+        detected_language = result.get("language", "en")
+
+        # Whisper often falsely detects Chinese when uncertain — re-run as English
+        if not language and not settings.WHISPER_LANGUAGE and detected_language == "zh":
+            logger.info("Auto-detect returned 'zh', re-transcribing as English")
+            result = model.transcribe(audio_path, fp16=False, verbose=False, language="en")
+            detected_language = "en"
 
         segments = []
         for seg in result.get("segments", []):
@@ -106,7 +113,6 @@ class WhisperService:
                 avg_logprob=seg.get("avg_logprob", 0.0),
             ))
 
-        detected_language = result.get("language", "en")
         logger.info(f"Transcribed {len(segments)} segments, language: {detected_language}")
 
         return TranscriptionResult(segments=segments, language=detected_language)

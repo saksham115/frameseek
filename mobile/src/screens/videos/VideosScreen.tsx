@@ -19,7 +19,7 @@ const FILTER_MAP = ['all', 'processing', 'ready'] as const;
 export default function VideosScreen() {
   const { colors } = useTheme();
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
-  const { videos, isLoading, fetchVideos, activeFilter, setActiveFilter, deleteVideo } = useVideosStore();
+  const { videos, isLoading, fetchVideos, activeFilter, setActiveFilter, deleteVideo, renameVideo } = useVideosStore();
   const [refreshing, setRefreshing] = useState(false);
 
   const segmentIndex = FILTER_MAP.indexOf(activeFilter);
@@ -52,6 +52,25 @@ export default function VideosScreen() {
 
   const handleSegmentChange = (index: number) => {
     setActiveFilter(FILTER_MAP[index]);
+  };
+
+  const handleRename = (videoId: string, currentTitle: string) => {
+    Alert.prompt(
+      'Rename Video',
+      undefined,
+      async (newTitle) => {
+        const trimmed = newTitle?.trim();
+        if (trimmed && trimmed !== currentTitle) {
+          try {
+            await renameVideo(videoId, trimmed);
+          } catch {
+            Alert.alert('Error', 'Failed to rename video');
+          }
+        }
+      },
+      'plain-text',
+      currentTitle,
+    );
   };
 
   const handleDelete = (videoId: string, title: string) => {
@@ -95,6 +114,7 @@ export default function VideosScreen() {
             <VideoCard
               video={item}
               onPress={() => navigation.navigate('VideoDetail', { videoId: item.video_id })}
+              onRename={() => handleRename(item.video_id, item.title)}
               onDelete={() => handleDelete(item.video_id, item.title)}
             />
           )}

@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     # Whisper
     WHISPER_MODEL_SIZE: str = "small"
     WHISPER_DEVICE: str = "cpu"
-    WHISPER_LANGUAGE: str | None = None  # None = auto-detect
+    WHISPER_LANGUAGE: str | None = None  # None = auto-detect, fallback to "en" in service
 
     # Apple IAP
     APPLE_SHARED_SECRET: str = ""  # App Store Connect shared secret for receipt validation

@@ -6,7 +6,6 @@ export const searchApi = {
     query: string;
     top_k?: number;
     video_ids?: string[];
-    source_filter?: string;
     min_score?: number;
   }) => apiClient.post<ApiResponse<SearchResponseData>>('/search', data),
 

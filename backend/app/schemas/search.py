@@ -9,7 +9,6 @@ class SearchRequest(BaseModel):
     query: str = Field(min_length=1, max_length=500)
     top_k: int = Field(default=20, ge=1, le=50)
     video_ids: list[UUID] | None = None
-    source_filter: str = "all"
     min_score: float = Field(default=0.05, ge=0.0, le=1.0)
 
 
@@ -22,12 +21,7 @@ class SearchResultItem(BaseModel):
     score: float
     frame_url: str
     thumbnail_url: str | None = None
-    source_type: str
-    match_type: str = "semantic_visual"  # "exact" | "semantic_audio" | "semantic_visual"
-    transcript_text: str | None = None
-    segment_start: float | None = None
-    segment_end: float | None = None
-    segment_id: str | None = None
+    match_type: str = "semantic_visual"
 
 
 class SearchQuota(BaseModel):

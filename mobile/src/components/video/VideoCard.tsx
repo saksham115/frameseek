@@ -12,9 +12,10 @@ interface VideoCardProps {
   video: VideoData;
   onPress: () => void;
   onDelete?: () => void;
+  onRename?: () => void;
 }
 
-export default function VideoCard({ video, onPress, onDelete }: VideoCardProps) {
+export default function VideoCard({ video, onPress, onDelete, onRename }: VideoCardProps) {
   const { colors } = useTheme();
 
   const statusVariant =
@@ -47,11 +48,18 @@ export default function VideoCard({ video, onPress, onDelete }: VideoCardProps) 
           <Badge label={video.status} variant={statusVariant} />
         </View>
       </View>
-      {onDelete && (
-        <TouchableOpacity onPress={onDelete} style={styles.deleteButton} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <Ionicons name="trash-outline" size={18} color={colors.error} />
-        </TouchableOpacity>
-      )}
+      <View style={styles.actions}>
+        {onRename && (
+          <TouchableOpacity onPress={onRename} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Ionicons name="pencil-outline" size={16} color={colors.textMid} />
+          </TouchableOpacity>
+        )}
+        {onDelete && (
+          <TouchableOpacity onPress={onDelete} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Ionicons name="trash-outline" size={18} color={colors.error} />
+          </TouchableOpacity>
+        )}
+      </View>
     </TouchableOpacity>
   );
 }
@@ -111,8 +119,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.sm,
   },
-  deleteButton: {
+  actions: {
     justifyContent: 'center',
+    alignItems: 'center',
+    gap: Spacing.md,
     paddingHorizontal: Spacing.sm,
   },
 });
