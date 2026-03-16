@@ -7,5 +7,6 @@ from app.models.search_history import SearchHistory, UserAnalytics
 from app.models.clip import Clip
 from app.models.transcript import TranscriptSegment
 from app.models.subscription import Subscription
+from app.models.account_deletion_feedback import AccountDeletionFeedback
 
-__all__ = ["User", "Video", "Frame", "Job", "Folder", "SearchHistory", "UserAnalytics", "Clip", "TranscriptSegment", "Subscription"]
+__all__ = ["User", "Video", "Frame", "Job", "Folder", "SearchHistory", "UserAnalytics", "Clip", "TranscriptSegment", "Subscription", "AccountDeletionFeedback"]

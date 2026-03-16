@@ -18,4 +18,7 @@ export const authApi = {
 
   logout: (refreshToken: string) =>
     apiClient.post('/auth/logout', { refresh_token: refreshToken }),
+
+  deleteAccount: (reason: string, feedback?: string) =>
+    apiClient.delete('/auth/account', { data: { reason, feedback } }),
 };

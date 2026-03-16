@@ -12,6 +12,7 @@ interface AuthState {
 
   googleSignIn: (idToken: string, name?: string) => Promise<void>;
   logout: () => Promise<void>;
+  deleteAccount: (reason: string, feedback?: string) => Promise<void>;
   restoreSession: () => Promise<void>;
   setUser: (user: UserData) => void;
   acceptTos: () => Promise<void>;
@@ -43,6 +44,15 @@ export const useAuthStore = create<AuthState>((set) => ({
       const refreshToken = await SecureStore.getItemAsync('refresh_token');
       if (refreshToken) await authApi.logout(refreshToken);
     } catch {}
+    await SecureStore.deleteItemAsync('access_token');
+    await SecureStore.deleteItemAsync('refresh_token');
+    await SecureStore.deleteItemAsync('tos_accepted');
+    set({ user: null, isAuthenticated: false, tosAccepted: false });
+    useSubscriptionStore.getState().reset();
+  },
+
+  deleteAccount: async (reason: string, feedback?: string) => {
+    await authApi.deleteAccount(reason, feedback);
     await SecureStore.deleteItemAsync('access_token');
     await SecureStore.deleteItemAsync('refresh_token');
     await SecureStore.deleteItemAsync('tos_accepted');

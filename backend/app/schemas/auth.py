@@ -44,3 +44,8 @@ class AcceptTosRequest(BaseModel):
 class AuthResponse(BaseModel):
     user: UserResponse
     tokens: Tokens
+
+
+class DeleteAccountRequest(BaseModel):
+    reason: str
+    feedback: str | None = None

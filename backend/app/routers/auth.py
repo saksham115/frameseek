@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.user import User
-from app.schemas.auth import AcceptTosRequest, AuthResponse, GoogleSignInRequest, LogoutRequest, RefreshRequest, Tokens, UserResponse
+from app.schemas.auth import AcceptTosRequest, AuthResponse, DeleteAccountRequest, GoogleSignInRequest, LogoutRequest, RefreshRequest, Tokens, UserResponse
 from app.schemas.common import ApiResponse
 from app.services.auth_service import AuthService
 
@@ -46,4 +46,15 @@ async def accept_tos(
 @router.post("/logout")
 async def logout(data: LogoutRequest):
     # In a production system, we'd blacklist the refresh token
+    return ApiResponse(data={"success": True})
+
+
+@router.delete("/account")
+async def delete_account(
+    data: DeleteAccountRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    service = AuthService(db)
+    await service.delete_account(current_user.user_id, reason=data.reason, feedback=data.feedback)
     return ApiResponse(data={"success": True})
