@@ -15,6 +15,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "in.frameseek.app",
+      "usesAppleSignIn": true,
       "infoPlist": {
         "CFBundleURLTypes": [
           {
@@ -40,7 +41,8 @@
     "plugins": [
       "expo-secure-store",
       "expo-font",
-      "@react-native-google-signin/google-signin"
+      "@react-native-google-signin/google-signin",
+      "expo-apple-authentication"
     ]
   }
 }

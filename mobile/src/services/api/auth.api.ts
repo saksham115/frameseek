@@ -5,6 +5,12 @@ export const authApi = {
   googleSignIn: (idToken: string, name?: string) =>
     apiClient.post<ApiResponse<AuthData>>('/auth/google', { id_token: idToken, name }),
 
+  appleSignIn: (identityToken: string, name?: string) =>
+    apiClient.post<ApiResponse<AuthData>>('/auth/apple', { identity_token: identityToken, name }),
+
+  demoSignIn: (email: string, password: string) =>
+    apiClient.post<ApiResponse<AuthData>>('/auth/demo', { email, password }),
+
   refresh: (refreshToken: string) =>
     apiClient.post<ApiResponse<AuthData['tokens']>>('/auth/refresh', {
       refresh_token: refreshToken,

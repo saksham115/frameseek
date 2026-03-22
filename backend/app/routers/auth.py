@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.user import User
-from app.schemas.auth import AcceptTosRequest, AuthResponse, DeleteAccountRequest, GoogleSignInRequest, LogoutRequest, RefreshRequest, Tokens, UserResponse
+from app.schemas.auth import AcceptTosRequest, AppleSignInRequest, AuthResponse, DeleteAccountRequest, DemoSignInRequest, GoogleSignInRequest, LogoutRequest, RefreshRequest, Tokens, UserResponse
 from app.schemas.common import ApiResponse
 from app.services.auth_service import AuthService
 
@@ -15,6 +15,20 @@ router = APIRouter()
 async def google_sign_in(data: GoogleSignInRequest, db: AsyncSession = Depends(get_db)):
     service = AuthService(db)
     result = await service.google_sign_in(data.id_token, data.name)
+    return ApiResponse(data=result)
+
+
+@router.post("/apple", response_model=ApiResponse[AuthResponse])
+async def apple_sign_in(data: AppleSignInRequest, db: AsyncSession = Depends(get_db)):
+    service = AuthService(db)
+    result = await service.apple_sign_in(data.identity_token, data.name)
+    return ApiResponse(data=result)
+
+
+@router.post("/demo", response_model=ApiResponse[AuthResponse])
+async def demo_sign_in(data: DemoSignInRequest, db: AsyncSession = Depends(get_db)):
+    service = AuthService(db)
+    result = await service.demo_sign_in(data.email, data.password)
     return ApiResponse(data=result)
 
 

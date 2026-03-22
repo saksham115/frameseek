@@ -1,6 +1,8 @@
 import logging
 from datetime import datetime, timezone
 
+import httpx
+import jwt as pyjwt
 from fastapi import HTTPException, status
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token as google_id_token
@@ -25,6 +27,117 @@ logger = logging.getLogger(__name__)
 class AuthService:
     def __init__(self, db: AsyncSession):
         self.repo = UserRepository(db)
+
+    async def demo_sign_in(self, email: str, password: str) -> AuthResponse:
+        """Sign in with the demo account for App Store Review."""
+        if email != settings.DEMO_ACCOUNT_EMAIL or password != settings.DEMO_ACCOUNT_PASSWORD:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid demo credentials",
+            )
+
+        user = await self.repo.get_by_email(email)
+        if not user:
+            # Create the demo user if it doesn't exist
+            user = await self.repo.create(email=email, name="Demo User")
+
+        await self.repo.update(user, last_login_at=datetime.now(timezone.utc))
+        tokens = self._generate_tokens(user)
+        return AuthResponse(user=UserResponse.model_validate(user), tokens=tokens)
+
+    @staticmethod
+    async def _get_apple_public_keys() -> dict:
+        """Fetch Apple's public keys for verifying identity tokens."""
+        async with httpx.AsyncClient() as client:
+            resp = await client.get("https://appleid.apple.com/auth/keys")
+            resp.raise_for_status()
+            return resp.json()
+
+    async def apple_sign_in(self, identity_token: str, name: str | None = None) -> AuthResponse:
+        """Verify an Apple identity token and sign in or create a user."""
+        try:
+            # Decode header to find the key ID
+            header = pyjwt.get_unverified_header(identity_token)
+            kid = header.get("kid")
+
+            # Fetch Apple's public keys
+            apple_keys = await self._get_apple_public_keys()
+            matching_key = None
+            for key in apple_keys.get("keys", []):
+                if key["kid"] == kid:
+                    matching_key = key
+                    break
+
+            if not matching_key:
+                raise ValueError("No matching Apple public key found")
+
+            public_key = pyjwt.algorithms.RSAAlgorithm.from_jwk(matching_key)
+            payload = pyjwt.decode(
+                identity_token,
+                public_key,
+                algorithms=["RS256"],
+                audience=settings.APPLE_BUNDLE_ID,
+                issuer="https://appleid.apple.com",
+            )
+        except Exception as e:
+            logger.error(f"Apple token verification failed: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=f"Invalid Apple identity token: {e}",
+            )
+
+        apple_id = payload["sub"]
+        email = payload.get("email")
+        apple_name = name or "User"
+
+        if not email:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Apple account has no email address",
+            )
+
+        # 1. Look up by apple_id (returning user)
+        user = await self.repo.get_by_apple_id(apple_id)
+        if user:
+            await self.repo.update(user, last_login_at=datetime.now(timezone.utc))
+            tokens = self._generate_tokens(user)
+            return AuthResponse(user=UserResponse.model_validate(user), tokens=tokens)
+
+        # 2. Look up by email (link existing account)
+        user = await self.repo.get_by_email(email)
+        if user:
+            await self.repo.update(
+                user,
+                apple_id=apple_id,
+                last_login_at=datetime.now(timezone.utc),
+            )
+            tokens = self._generate_tokens(user)
+            return AuthResponse(user=UserResponse.model_validate(user), tokens=tokens)
+
+        # 3. Reactivate a previously deleted account
+        user = await self.repo.get_deleted_by_apple_id(apple_id)
+        if not user:
+            user = await self.repo.get_deleted_by_email(email)
+        if user:
+            await self.repo.update(
+                user,
+                deleted_at=None,
+                name=apple_name,
+                apple_id=apple_id,
+                last_login_at=datetime.now(timezone.utc),
+                tos_accepted_at=None,
+            )
+            tokens = self._generate_tokens(user)
+            return AuthResponse(user=UserResponse.model_validate(user), tokens=tokens)
+
+        # 4. Create new user
+        user = await self.repo.create(
+            email=email,
+            name=apple_name,
+            apple_id=apple_id,
+        )
+        tokens = self._generate_tokens(user)
+        return AuthResponse(user=UserResponse.model_validate(user), tokens=tokens)
 
     async def google_sign_in(self, token: str, name: str | None = None) -> AuthResponse:
         # Verify the Google ID token against all valid audiences

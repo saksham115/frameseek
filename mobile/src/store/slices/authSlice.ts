@@ -11,6 +11,8 @@ interface AuthState {
   tosAccepted: boolean;
 
   googleSignIn: (idToken: string, name?: string) => Promise<void>;
+  appleSignIn: (identityToken: string, name?: string) => Promise<void>;
+  demoSignIn: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   deleteAccount: (reason: string, feedback?: string) => Promise<void>;
   restoreSession: () => Promise<void>;
@@ -26,6 +28,36 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   googleSignIn: async (idToken, name) => {
     const response = await authApi.googleSignIn(idToken, name);
+    const { user, tokens } = response.data.data;
+    await SecureStore.setItemAsync('access_token', tokens.access_token);
+    await SecureStore.setItemAsync('refresh_token', tokens.refresh_token);
+    const tosAccepted = !!user.tos_accepted_at;
+    if (tosAccepted) {
+      await SecureStore.setItemAsync('tos_accepted', 'true');
+    } else {
+      await SecureStore.deleteItemAsync('tos_accepted');
+    }
+    set({ user, isAuthenticated: true, tosAccepted });
+    useSubscriptionStore.getState().initialize();
+  },
+
+  appleSignIn: async (identityToken, name) => {
+    const response = await authApi.appleSignIn(identityToken, name);
+    const { user, tokens } = response.data.data;
+    await SecureStore.setItemAsync('access_token', tokens.access_token);
+    await SecureStore.setItemAsync('refresh_token', tokens.refresh_token);
+    const tosAccepted = !!user.tos_accepted_at;
+    if (tosAccepted) {
+      await SecureStore.setItemAsync('tos_accepted', 'true');
+    } else {
+      await SecureStore.deleteItemAsync('tos_accepted');
+    }
+    set({ user, isAuthenticated: true, tosAccepted });
+    useSubscriptionStore.getState().initialize();
+  },
+
+  demoSignIn: async (email, password) => {
+    const response = await authApi.demoSignIn(email, password);
     const { user, tokens } = response.data.data;
     await SecureStore.setItemAsync('access_token', tokens.access_token);
     await SecureStore.setItemAsync('refresh_token', tokens.refresh_token);

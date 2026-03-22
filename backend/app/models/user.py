@@ -36,6 +36,7 @@ class User(Base):
     google_access_token: Mapped[str | None] = mapped_column(Text)
     google_refresh_token: Mapped[str | None] = mapped_column(Text)
     google_token_expires_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
+    apple_id: Mapped[str | None] = mapped_column(String(255), unique=True, index=True)
 
     # Terms of Service
     tos_accepted_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))

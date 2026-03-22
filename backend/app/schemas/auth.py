@@ -9,6 +9,16 @@ class GoogleSignInRequest(BaseModel):
     name: str | None = None
 
 
+class AppleSignInRequest(BaseModel):
+    identity_token: str
+    name: str | None = None
+
+
+class DemoSignInRequest(BaseModel):
+    email: str
+    password: str
+
+
 class RefreshRequest(BaseModel):
     refresh_token: str
 

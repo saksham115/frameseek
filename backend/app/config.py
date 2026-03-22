@@ -41,6 +41,10 @@ class Settings(BaseSettings):
     WHISPER_DEVICE: str = "cpu"
     WHISPER_LANGUAGE: str | None = None  # None = auto-detect, fallback to "en" in service
 
+    # Demo account (App Store Review)
+    DEMO_ACCOUNT_EMAIL: str = "saksham115test@gmail.com"
+    DEMO_ACCOUNT_PASSWORD: str = "testing@1850"
+
     # Apple IAP
     APPLE_SHARED_SECRET: str = ""  # App Store Connect shared secret for receipt validation
     APPLE_BUNDLE_ID: str = "in.frameseek.app"

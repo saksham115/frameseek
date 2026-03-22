@@ -1,4 +1,4 @@
-# App Store Review - Guideline 2.1 Response
+# App Store Review Responses
 
 ## 1. Screen Recording
 
@@ -32,16 +32,27 @@ Users upload videos, which are automatically processed — frames are extracted 
 
 ## 3. Test Credentials & Instructions
 
-**Authentication:** The app uses Google Sign-In exclusively.
+**Authentication:** The app supports Sign in with Apple, Google Sign-In, and a Demo Login for review purposes.
 
-- **Test Email:** [INSERT_TEST_GMAIL_HERE]
-- **Test Password:** [INSERT_TEST_PASSWORD_HERE]
+**Recommended method for App Review — Demo Login (no third-party auth required):**
 
-**Instructions to access main features:**
+1. Launch the app
+2. Tap **"Demo Login"** at the bottom of the login screen
+3. This signs in automatically with the demo account — no external authentication, no verification codes
 
-1. Launch the app and tap "Sign in with Google"
-2. Sign in with the test credentials above
-3. Accept the Terms of Service on first login
+**Alternative — Sign in with Apple:**
+
+1. Launch the app and tap **"Sign in with Apple"**
+2. Authenticate with any Apple ID
+
+**Alternative — Google Sign-In:**
+
+- **Test Email:** saksham115test@gmail.com
+- **Test Password:** testing@1850
+
+**Instructions to access main features after signing in:**
+
+1. Accept the Terms of Service on first login
 4. **Upload a video:** Tap the upload button on the Home screen, select a video from the photo library (the app will request photo library access)
 5. **Wait for processing:** The video will show processing status as frames are extracted and AI embeddings are generated (typically 1-2 minutes for a short video)
 6. **Search:** Once processed, use the search bar to type a natural language description (e.g., "person walking", "blue sky"). Results show matching frames with timestamps
@@ -56,7 +67,8 @@ Users upload videos, which are automatically processed — frames are extracted 
 
 | Service | Purpose |
 |---------|---------|
-| **Google OAuth 2.0** | User authentication — users sign in exclusively via Google Sign-In |
+| **Sign in with Apple** | User authentication — primary login option per App Store guidelines |
+| **Google OAuth 2.0** | User authentication — alternative login via Google Sign-In |
 | **Google Vertex AI (Multimodal Embeddings)** | Converts extracted video frames into 1408-dimensional semantic vectors for natural language search |
 | **Google Cloud Storage** | Stores uploaded videos, extracted frames, thumbnails, and generated clips |
 | **OpenAI Whisper** | Automatic speech recognition — generates video transcripts for enhanced search |
@@ -76,3 +88,39 @@ FrameSeek functions consistently across all regions. There are no regional diffe
 ## 6. Regulated Industry
 
 FrameSeek does not operate in a highly regulated industry. The app is a general-purpose video search tool and does not provide services in healthcare, finance, gambling, legal, or any other regulated sector. No special documentation or credentials are required.
+
+---
+
+## 7. Guideline 2.1(b) — Business Model
+
+**1. Who are the users that will use the paid services in the app?**
+
+All users of FrameSeek can access paid subscription tiers. Our users are content creators, researchers, journalists, and individuals with large video libraries who need advanced video search capabilities. Any user can upgrade from the free tier to a paid plan for increased storage, more monthly searches, and longer video retention.
+
+**2. Where can users purchase the services that can be accessed in the app?**
+
+All paid subscriptions are purchased exclusively through Apple In-App Purchase (StoreKit 2) within the app. There is no external purchase mechanism — the App Store is the sole point of sale.
+
+**3. What specific types of previously purchased services can a user access in the app?**
+
+Users who have previously purchased a subscription (Pro or Pro Max) can access:
+- **Pro ($6.99/month or $55.99/year):** 20 GB storage, 100 searches/month, 90-day video retention
+- **Pro Max ($14.99/month or $119.99/year):** 50 GB storage, 500 searches/month, 90-day video retention
+
+The app includes a "Restore Purchases" button (Settings > Plan) that restores any previously purchased subscriptions via Apple's StoreKit API.
+
+**4. What paid content, subscriptions, or features are unlocked within the app that do not use In-App Purchase?**
+
+None. All paid features are unlocked exclusively through Apple In-App Purchase. There are no external payment methods, no web-based subscriptions, and no way to bypass IAP. The free tier (5 GB storage, 20 searches/month, 15-day retention) is available to all users without any purchase.
+
+---
+
+## 8. Guideline 4.8 — Sign in with Apple
+
+The app now offers **Sign in with Apple** as the primary login option on the login screen. It meets all requirements:
+
+- **Limits data collection** to the user's name and email address only
+- **Allows users to keep their email private** via Apple's private email relay
+- **Does not collect interactions for advertising** — FrameSeek has no advertising and does not share user data with any advertising services
+
+Sign in with Apple is displayed prominently above Google Sign-In on the login screen.
