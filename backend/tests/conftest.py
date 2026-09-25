@@ -11,7 +11,7 @@ from sqlalchemy.pool import NullPool
 from app.config import settings
 from app.database import Base, get_db
 from app.models.user import User
-from app.utils.security import create_access_token, create_refresh_token, hash_password
+from app.utils.security import create_access_token
 
 # ---------------------------------------------------------------------------
 # Test DB URL – reuse settings host/port but target the `frameseek_test` DB.
@@ -95,23 +95,31 @@ async def client(db_session: AsyncSession, storage_dir):
     mock_metadata.height = 1080
     mock_metadata.codec = "h264"
 
-    # Mock vector_db (Qdrant)
+    # Mock external vector search while keeping the SQL-backed API logic real.
     mock_vector_db = MagicMock()
     mock_vector_db.search.return_value = []
     mock_vector_db.create_collection.return_value = True
     mock_vector_db.upsert_embeddings.return_value = 0
     mock_vector_db.delete_embeddings.return_value = 0
 
-    # Mock enqueue_job (ARQ / Redis)
+    # Mock enqueue (Service Bus)
     mock_enqueue = AsyncMock()
 
-    # Mock EmbeddingService.generate_text_embedding
-    mock_text_embedding = AsyncMock(return_value=[0.1] * 1408)
+    mock_blob = MagicMock()
+    mock_blob.generate_upload_sas.return_value = "https://storage.test/upload"
+    mock_blob.generate_signed_url.return_value = "https://storage.test/read"
+    mock_blob.blob_exists.return_value = True
+    mock_blob.get_blob_size.return_value = 1024
+
+    # Mock EmbeddingService.generate_text_embedding (AI Vision is 1024-dim now)
+    mock_text_embedding = AsyncMock(return_value=[0.1] * 1024)
 
     with (
-        patch("app.services.video_service.extract_metadata", return_value=mock_metadata) as _mock_extract,
         patch("app.services.search_service.vector_db", mock_vector_db),
+        patch("app.services.video_service.vector_db", mock_vector_db),
         patch("app.workers.worker.enqueue_job", mock_enqueue),
+        patch("app.utils.gcs_client.GCSClient.get", return_value=mock_blob),
+        patch("app.utils.gcs_client.GCSClient.is_enabled", return_value=True),
         patch("app.services.search_service.EmbeddingService") as MockEmbedSvc,
         patch.object(settings, "STORAGE_BASE_PATH", str(storage_dir)),
         patch("app.database.async_session", TestingSessionLocal),
@@ -119,9 +127,10 @@ async def client(db_session: AsyncSession, storage_dir):
         MockEmbedSvc.return_value.generate_text_embedding = mock_text_embedding
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
-            ac.mock_extract_metadata = _mock_extract
+            ac.mock_metadata = mock_metadata
             ac.mock_vector_db = mock_vector_db
             ac.mock_enqueue = mock_enqueue
+            ac.mock_blob = mock_blob
             ac.mock_embed_service = MockEmbedSvc
             ac.storage_dir = storage_dir
             yield ac
@@ -140,10 +149,9 @@ def _make_tokens(user: User) -> dict:
         "plan": user.plan_type,
     }
     access = create_access_token(token_data)
-    refresh = create_refresh_token(token_data)
+    # get_current_user accepts a Bearer header as a fallback to the session cookie.
     return {
         "access_token": access,
-        "refresh_token": refresh,
         "headers": {"Authorization": f"Bearer {access}"},
     }
 
@@ -153,23 +161,13 @@ async def _create_user_in_db(
     *,
     email: str = "test@example.com",
     name: str = "Test User",
-    password: str = "testpassword123",
 ) -> dict:
-    user = User(
-        email=email,
-        name=name,
-        password_hash=hash_password(password),
-    )
+    user = User(email=email, name=name, google_id=f"g-{uuid.uuid4().hex}")
     session.add(user)
     await session.flush()
     await session.commit()
     tokens = _make_tokens(user)
-    return {
-        "user": user,
-        "user_id": user.user_id,
-        "password": password,
-        **tokens,
-    }
+    return {"user": user, "user_id": user.user_id, **tokens}
 
 
 # ---------------------------------------------------------------------------

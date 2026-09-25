@@ -1,168 +1,91 @@
-import uuid
-from datetime import datetime, timedelta, timezone
+"""Auth tests for the web OAuth + cookie-session flow.
 
-from jose import jwt
+The Google authorization-code exchange hits Google's servers, so it isn't unit-tested
+here; these cover the session dependency and the endpoints that don't require a live
+Google round-trip. get_current_user accepts a Bearer header as a fallback to the cookie,
+which is how the fixtures authenticate.
+"""
+
+import pytest
+from unittest.mock import AsyncMock
 
 from app.config import settings
-
-URL = "/api/v1/auth"
-
-
-# ── Register ────────────────────────────────────────────────────────────────
-
-class TestRegister:
-    async def test_register_success(self, client):
-        resp = await client.post(f"{URL}/register", json={
-            "email": "new@test.com", "password": "strongpass1", "name": "New User",
-        })
-        assert resp.status_code == 200
-        body = resp.json()
-        assert body["success"] is True
-        data = body["data"]
-        assert data["user"]["email"] == "new@test.com"
-        assert data["user"]["name"] == "New User"
-        assert "access_token" in data["tokens"]
-        assert "refresh_token" in data["tokens"]
-
-    async def test_register_returns_valid_jwt(self, client):
-        resp = await client.post(f"{URL}/register", json={
-            "email": "jwt@test.com", "password": "strongpass1", "name": "JWT User",
-        })
-        token = resp.json()["data"]["tokens"]["access_token"]
-        payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
-        assert payload["type"] == "access"
-        assert payload["email"] == "jwt@test.com"
-
-    async def test_register_duplicate_email(self, client, test_user):
-        resp = await client.post(f"{URL}/register", json={
-            "email": "alice@test.com", "password": "strongpass1", "name": "Dup",
-        })
-        assert resp.status_code == 409
-
-    async def test_register_short_password(self, client):
-        resp = await client.post(f"{URL}/register", json={
-            "email": "short@test.com", "password": "abc", "name": "Short",
-        })
-        assert resp.status_code == 422
-
-    async def test_register_invalid_email(self, client):
-        resp = await client.post(f"{URL}/register", json={
-            "email": "not-an-email", "password": "strongpass1", "name": "Bad",
-        })
-        assert resp.status_code == 422
-
-    async def test_register_empty_name(self, client):
-        resp = await client.post(f"{URL}/register", json={
-            "email": "empty@test.com", "password": "strongpass1", "name": "",
-        })
-        assert resp.status_code == 422
-
-    async def test_register_missing_fields(self, client):
-        resp = await client.post(f"{URL}/register", json={"email": "x@test.com"})
-        assert resp.status_code == 422
+from app.utils import sessions
+from app.utils.security import decode_token
 
 
-# ── Login ───────────────────────────────────────────────────────────────────
+async def test_callback_cookie_session_refresh_and_logout(client, test_user, monkeypatch):
+    from app.services.auth_service import AuthService
 
-class TestLogin:
-    async def test_login_success(self, client, test_user):
-        resp = await client.post(f"{URL}/login", json={
-            "email": "alice@test.com", "password": test_user["password"],
-        })
-        assert resp.status_code == 200
-        data = resp.json()["data"]
-        assert data["user"]["email"] == "alice@test.com"
-        assert "access_token" in data["tokens"]
+    allowlist = {}
 
-    async def test_login_wrong_password(self, client, test_user):
-        resp = await client.post(f"{URL}/login", json={
-            "email": "alice@test.com", "password": "wrongwrong",
-        })
-        assert resp.status_code == 401
+    async def register(jti, user_id):
+        allowlist[jti] = user_id
 
-    async def test_login_nonexistent_email(self, client):
-        resp = await client.post(f"{URL}/login", json={
-            "email": "nobody@test.com", "password": "whatever1",
-        })
-        assert resp.status_code == 401
+    async def valid(jti, user_id):
+        return allowlist.get(jti) == user_id
 
-    async def test_login_updates_last_login(self, client, db_session, test_user):
-        before = test_user["user"].last_login_at
-        await client.post(f"{URL}/login", json={
-            "email": "alice@test.com", "password": test_user["password"],
-        })
-        await db_session.refresh(test_user["user"])
-        assert test_user["user"].last_login_at is not None
-        if before is not None:
-            assert test_user["user"].last_login_at > before
+    async def revoke(jti):
+        allowlist.pop(jti, None)
 
-    async def test_login_missing_fields(self, client):
-        resp = await client.post(f"{URL}/login", json={"email": "x@test.com"})
-        assert resp.status_code == 422
+    monkeypatch.setattr(sessions, "register_refresh", register)
+    monkeypatch.setattr(sessions, "is_refresh_valid", valid)
+    monkeypatch.setattr(sessions, "revoke_refresh", revoke)
+    exchange = AsyncMock(return_value=test_user["user"])
+    monkeypatch.setattr(AuthService, "exchange_google_code", exchange)
+    client.cookies.set("fs_oauth_state", "test-state")
 
+    invalid = await client.get("/api/v1/auth/google/callback", params={"code": "test-code", "state": "wrong-state"})
+    assert invalid.status_code == 400
+    exchange.assert_not_awaited()
 
-# ── Refresh ─────────────────────────────────────────────────────────────────
+    callback = await client.get("/api/v1/auth/google/callback", params={"code": "test-code", "state": "test-state"}, follow_redirects=False)
+    assert callback.status_code in (302, 307)
+    assert callback.headers["location"] == settings.FRONTEND_URL
+    assert "HttpOnly" in callback.headers["set-cookie"]
+    original_refresh = client.cookies.get(settings.REFRESH_COOKIE_NAME)
+    assert original_refresh
+    me = await client.get("/api/v1/auth/me")
+    assert me.status_code == 200
+    assert me.json()["data"]["user_id"] == str(test_user["user_id"])
 
-class TestRefresh:
-    async def test_refresh_success(self, client, test_user):
-        resp = await client.post(f"{URL}/refresh", json={
-            "refresh_token": test_user["refresh_token"],
-        })
-        assert resp.status_code == 200
-        data = resp.json()["data"]
-        assert "access_token" in data
-        assert "refresh_token" in data
+    refreshed = await client.post("/api/v1/auth/refresh")
+    assert refreshed.status_code == 200
+    rotated_refresh = client.cookies.get(settings.REFRESH_COOKIE_NAME)
+    assert rotated_refresh != original_refresh
+    assert decode_token(original_refresh)["jti"] not in allowlist
+    replay = await client.post("/api/v1/auth/refresh", headers={"Cookie": f"{settings.REFRESH_COOKIE_NAME}={original_refresh}"})
+    assert replay.status_code == 401
 
-    async def test_refresh_with_access_token_rejected(self, client, test_user):
-        """Access tokens should NOT be accepted as refresh tokens."""
-        resp = await client.post(f"{URL}/refresh", json={
-            "refresh_token": test_user["access_token"],
-        })
-        assert resp.status_code == 401
-
-    async def test_refresh_expired_token(self, client, test_user):
-        expired_data = {
-            "sub": str(test_user["user_id"]),
-            "email": "alice@test.com",
-            "name": "Alice",
-            "plan": "free",
-            "exp": datetime.now(timezone.utc) - timedelta(days=1),
-            "type": "refresh",
-        }
-        expired_token = jwt.encode(expired_data, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
-        resp = await client.post(f"{URL}/refresh", json={"refresh_token": expired_token})
-        assert resp.status_code == 401
-
-    async def test_refresh_invalid_string(self, client):
-        resp = await client.post(f"{URL}/refresh", json={"refresh_token": "not.a.valid.token"})
-        assert resp.status_code == 401
-
-    async def test_refresh_deleted_user(self, client, db_session, test_user):
-        """Soft-deleted user should not be able to refresh."""
-        user = test_user["user"]
-        user.deleted_at = datetime.now(timezone.utc)
-        await db_session.flush()
-        await db_session.commit()
-
-        resp = await client.post(f"{URL}/refresh", json={
-            "refresh_token": test_user["refresh_token"],
-        })
-        assert resp.status_code == 401
+    logout = await client.post("/api/v1/auth/logout")
+    assert logout.status_code == 200
+    assert decode_token(rotated_refresh)["jti"] not in allowlist
+    assert (await client.get("/api/v1/auth/me")).status_code == 401
 
 
-# ── Logout ──────────────────────────────────────────────────────────────────
+@pytest.mark.asyncio
+async def test_me_requires_auth(client):
+    resp = await client.get("/api/v1/auth/me")
+    assert resp.status_code == 401
 
-class TestLogout:
-    async def test_logout_success(self, client, test_user):
-        resp = await client.post(f"{URL}/logout", json={
-            "refresh_token": test_user["refresh_token"],
-        })
-        assert resp.status_code == 200
-        assert resp.json()["data"]["success"] is True
 
-    async def test_logout_not_validated(self, client):
-        """Logout accepts any token without server-side validation."""
-        resp = await client.post(f"{URL}/logout", json={
-            "refresh_token": "whatever",
-        })
-        assert resp.status_code == 200
+@pytest.mark.asyncio
+async def test_me_returns_current_user(client, test_user):
+    resp = await client.get("/api/v1/auth/me", headers=test_user["headers"])
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert data["email"] == "alice@test.com"
+    assert data["user_id"] == str(test_user["user_id"])
+
+
+@pytest.mark.asyncio
+async def test_google_start_redirects_to_google(client):
+    resp = await client.get("/api/v1/auth/google/start", follow_redirects=False)
+    assert resp.status_code in (302, 307)
+    assert "accounts.google.com" in resp.headers["location"]
+
+
+@pytest.mark.asyncio
+async def test_logout_ok(client, test_user):
+    resp = await client.post("/api/v1/auth/logout", headers=test_user["headers"])
+    assert resp.status_code == 200

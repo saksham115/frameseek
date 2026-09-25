@@ -27,6 +27,7 @@ htmlcov/
 
 # Node
 node_modules/
+web/dist/
 
 # Expo
 mobile/.expo/

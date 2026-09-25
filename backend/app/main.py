@@ -1,55 +1,57 @@
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
+from sqlalchemy import text
 
 from app.config import settings
-from app.routers import auth, videos, search, jobs, folders, analytics, storage, clips, subscriptions
+from app.routers import analytics, auth, clips, folders, jobs, search, storage, subscriptions, videos
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
-    from app.database import engine, Base
-    from app.models import user, video, frame, job, folder, search_history, subscription
+    from app.database import engine
 
-    # Validate GCP Vertex AI configuration
-    if not settings.GCP_PROJECT_ID:
-        raise RuntimeError("GCP_PROJECT_ID is not set. Vertex AI embeddings require GCP configuration.")
-    if not settings.GCP_LOCATION:
-        raise RuntimeError("GCP_LOCATION is not set. Vertex AI embeddings require GCP configuration.")
-    if not settings.GCP_SERVICE_ACCOUNT_PATH:
-        raise RuntimeError("GCP_SERVICE_ACCOUNT_PATH is not set. Provide the path to your service account JSON file.")
+    # Fail fast on unsafe config (placeholder JWT secret, missing prod keys).
+    settings.validate_runtime()
 
-    from pathlib import Path
-    if not Path(settings.GCP_SERVICE_ACCOUNT_PATH).is_file():
-        raise RuntimeError(f"Service account file not found: {settings.GCP_SERVICE_ACCOUNT_PATH}")
+    # Wire Application Insights when configured (no-op locally).
+    import os
+
+    if os.getenv("APPLICATIONINSIGHTS_CONNECTION_STRING"):
+        try:
+            from azure.monitor.opentelemetry import configure_azure_monitor
+
+            configure_azure_monitor(logger_name="app")
+            logger.info("Application Insights configured")
+        except Exception:
+            logger.exception("Failed to configure Application Insights")
 
     yield
-    # Shutdown
     await engine.dispose()
 
 
 app = FastAPI(
     title="FrameSeek API",
     description="AI-powered video search platform",
-    version="1.0.0",
+    version="2.0.0",
     lifespan=lifespan,
+    docs_url=None if not settings.DEBUG else "/docs",
+    redoc_url=None if not settings.DEBUG else "/redoc",
 )
 
+# Cookie sessions require a concrete origin allowlist (not "*") with credentials enabled.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.cors_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Mount static storage for serving frames/thumbnails
-app.mount("/storage", StaticFiles(directory=str(settings.storage_path)), name="storage")
-
-# Register routers
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(videos.router, prefix="/api/v1/videos", tags=["videos"])
 app.include_router(search.router, prefix="/api/v1/search", tags=["search"])
@@ -63,4 +65,22 @@ app.include_router(subscriptions.router, prefix="/api/v1/subscriptions", tags=["
 
 @app.get("/health")
 async def health_check():
-    return {"status": "ok", "service": "frameseek-api"}
+    """Liveness + dependency check. Returns 503 if Postgres is unreachable."""
+    from fastapi import Response
+    from app.database import async_session
+
+    checks = {"api": "ok"}
+    status_code = 200
+    try:
+        async with async_session() as db:
+            await db.execute(text("SELECT 1"))
+        checks["postgres"] = "ok"
+    except Exception:
+        checks["postgres"] = "error"
+        status_code = 503
+
+    return Response(
+        content=str(checks).replace("'", '"'),
+        media_type="application/json",
+        status_code=status_code,
+    )

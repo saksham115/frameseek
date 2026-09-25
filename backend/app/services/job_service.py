@@ -39,12 +39,23 @@ class JobService:
         # Update video status
         await self.video_repo.update(video, status="queued")
 
-        # Enqueue to ARQ
+        # Both inline workers and queue consumers use a separate DB connection.
+        # Publish only after they can see the job and finalized upload.
+        await self.job_repo.db.commit()
+
+        # Enqueue to Service Bus. A failure must not silently strand the job as "queued"
+        # forever — surface it so the client can retry.
         try:
             from app.workers.worker import enqueue_job
             await enqueue_job(str(job.job_id))
-        except Exception:
-            pass  # Worker may not be running in dev
+        except Exception as exc:
+            await self.job_repo.update(job, status="failed", error_message=f"enqueue failed: {exc}")
+            await self.video_repo.update(video, status="error")
+            await self.job_repo.db.commit()
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Could not queue processing job. Please try again.",
+            )
 
         return job
 

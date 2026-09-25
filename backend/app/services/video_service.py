@@ -1,9 +1,10 @@
+import asyncio
 import os
 import shutil
 from pathlib import Path
 from uuid import UUID
 
-from fastapi import HTTPException, UploadFile, status
+from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -12,7 +13,6 @@ from app.repositories.video_repo import VideoRepository
 from app.services.clip_service import ClipService
 from app.services.storage_service import StorageService
 from app.utils.gcs_client import GCSClient
-from app.utils.video_metadata import extract_metadata
 
 
 class VideoService:
@@ -20,74 +20,66 @@ class VideoService:
         self.repo = VideoRepository(db)
         self.storage_service = StorageService(db)
 
-    async def upload_video(self, file: UploadFile, user_id: UUID, title: str | None = None, folder_id: UUID | None = None, local_uri: str | None = None, thumbnail_uri: str | None = None) -> dict:
-        filename = file.filename or "unknown.mp4"
-        file_title = title or os.path.splitext(filename)[0]
-
-        # Check file size
-        file.file.seek(0, 2)
-        file_size = file.file.tell()
-        file.file.seek(0)
-
-        max_size = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
-        if file_size > max_size:
+    # ------------------------------------------------------------------ direct-to-Blob upload
+    async def create_upload_target(
+        self,
+        user_id: UUID,
+        filename: str,
+        size_bytes: int,
+        content_type: str | None = None,
+        folder_id: UUID | None = None,
+    ) -> tuple:
+        """Create a pending video row and return a short-lived SAS PUT URL so the browser
+        uploads straight to Blob (the API never proxies the bytes)."""
+        if size_bytes > settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024:
             raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="File too large")
+        if not GCSClient.is_enabled():
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Storage not configured")
 
-        # Check storage quota
+        # Soft pre-check; the authoritative atomic reservation happens at finalize.
         quota = await self.storage_service.get_quota(user_id)
-        if quota["used_bytes"] + file_size > quota["limit_bytes"]:
-            raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="Storage limit exceeded. Please delete some videos or upgrade your plan.")
+        if quota["used_bytes"] + size_bytes > quota["limit_bytes"]:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail="Storage limit exceeded. Delete some videos or upgrade your plan.",
+            )
 
-        # Create video record first to get ID
+        ext = os.path.splitext(filename)[1] or ".mp4"
+        title = os.path.splitext(filename)[0]
         video = await self.repo.create(
             user_id=user_id,
-            title=file_title,
+            title=title,
             original_filename=filename,
-            file_path="",  # Will update after saving
-            file_size_bytes=file_size,
-            source_type="local",
+            file_path="",
+            file_size_bytes=size_bytes,
+            source_type="upload",
             folder_id=folder_id,
-            local_uri=local_uri,
-            thumbnail_uri=thumbnail_uri,
+            status="uploaded",
         )
+        gcs_path = f"videos/{user_id}/{video.video_id}/original{ext}"
+        await self.repo.update(video, gcs_path=gcs_path)
 
-        # Save file to storage
-        video_dir = Path(settings.STORAGE_BASE_PATH) / "videos" / str(user_id) / str(video.video_id)
-        video_dir.mkdir(parents=True, exist_ok=True)
-        ext = os.path.splitext(filename)[1] or ".mp4"
-        file_path = video_dir / f"original{ext}"
+        upload_url = await asyncio.to_thread(GCSClient.get().generate_upload_sas, gcs_path)
+        return video, upload_url
 
-        with open(file_path, "wb") as f:
-            shutil.copyfileobj(file.file, f)
+    async def finalize_upload(self, video_id: UUID, user_id: UUID):
+        """Confirm the blob was uploaded, reserve quota atomically, and return the video."""
+        video = await self.repo.get_by_id(video_id, user_id)
+        if not video:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
+        if not video.gcs_path or not await asyncio.to_thread(GCSClient.get().blob_exists, video.gcs_path):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Upload not found in storage")
 
-        # Extract metadata
-        metadata = extract_metadata(str(file_path))
+        actual_size = await asyncio.to_thread(GCSClient.get().get_blob_size, video.gcs_path)
+        reserved = await self.storage_service.try_reserve_storage(user_id, actual_size)
+        if not reserved:
+            await asyncio.to_thread(GCSClient.get().delete_prefix, f"videos/{user_id}/{video_id}/")
+            await self.repo.delete(video)
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="Storage limit exceeded"
+            )
 
-        # Upload to GCS if enabled
-        gcs_path = None
-        gcs_bucket = None
-        if GCSClient.is_enabled():
-            gcs = GCSClient.get()
-            gcs_path = f"videos/{user_id}/{video.video_id}/original{ext}"
-            gcs.upload_file(file_path, gcs_path)
-            gcs_bucket = settings.GCS_BUCKET_NAME
-
-        # Update video record
-        await self.repo.update(
-            video,
-            file_path=str(file_path),
-            gcs_path=gcs_path,
-            gcs_bucket=gcs_bucket,
-            duration_seconds=metadata.duration_seconds,
-            fps=metadata.fps,
-            width=metadata.width,
-            height=metadata.height,
-            codec=metadata.codec,
-        )
-
-        # Update storage usage
-        await self.storage_service.update_storage_used(user_id, file_size)
-
+        await self.repo.update(video, file_size_bytes=actual_size, status="uploaded")
         return video
 
     async def get_video(self, video_id: UUID, user_id: UUID):
@@ -104,38 +96,28 @@ class VideoService:
         if not video:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
 
-        # Delete associated clips and their files
         clip_service = ClipService(self.repo.db)
         await clip_service.delete_clips_for_video(video_id, user_id)
 
-        # Delete embeddings from Qdrant
         vector_db.delete_by_video_id(str(user_id), str(video_id))
 
-        # Delete frame and job records from DB
         await self.repo.delete_frames(video_id)
         await self.repo.delete_jobs(video_id)
 
-        # Delete files from storage
+        # Any local temp files (dev mode)
         if video.file_path:
             video_dir = Path(video.file_path).parent
             if video_dir.exists():
                 shutil.rmtree(video_dir, ignore_errors=True)
-
-        # Delete frames directory
         frames_dir = Path(settings.STORAGE_BASE_PATH) / "frames" / str(video_id)
         if frames_dir.exists():
             shutil.rmtree(frames_dir, ignore_errors=True)
 
-        # Delete from GCS
         if GCSClient.is_enabled() and video.gcs_path:
-            gcs = GCSClient.get()
-            gcs.delete_prefix(f"videos/{video.user_id}/{video_id}/")
-            gcs.delete_prefix(f"frames/{video_id}/")
+            await asyncio.to_thread(GCSClient.get().delete_prefix, f"videos/{video.user_id}/{video_id}/")
+            await asyncio.to_thread(GCSClient.get().delete_prefix, f"frames/{video_id}/")
 
-        # Update storage usage (subtract file size)
         await self.storage_service.update_storage_used(user_id, -(video.file_size_bytes or 0))
-
-        # Hard-delete video record
         await self.repo.delete(video)
 
     async def get_frame_count(self, video_id: UUID) -> int:

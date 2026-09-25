@@ -38,6 +38,9 @@ class User(Base):
     google_token_expires_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
     apple_id: Mapped[str | None] = mapped_column(String(255), unique=True, index=True)
 
+    # Billing (Stripe)
+    stripe_customer_id: Mapped[str | None] = mapped_column(String(255), unique=True, index=True)
+
     # Terms of Service
     tos_accepted_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
 

@@ -9,7 +9,7 @@ from app.models.search_history import SearchHistory
 from app.models.user import User
 from app.repositories.vector_db import vector_db
 from app.schemas.search import SearchQuota, SearchRequest, SearchResponse, SearchResultItem
-from app.services.embedding_service import EmbeddingService
+from app.services.embedding_service import EmbeddingService, EmbeddingUnavailableError
 
 from app.utils.formatting import format_duration
 from app.utils.gcs_client import GCSClient
@@ -23,14 +23,21 @@ class SearchService:
     async def search(self, request: SearchRequest, user_id: UUID) -> SearchResponse:
         start_time = time.time()
 
-        # Check quota (limit == -1 means unlimited)
-        quota = await self.get_quota(user_id)
-        if quota.limit != -1 and quota.remaining <= 0:
+        # Reset the counter at month boundaries, then atomically reserve one search.
+        await self.get_quota(user_id)
+        if not await self._reserve_search(user_id):
             from fastapi import HTTPException, status
             raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Monthly search quota exceeded")
 
-        # Semantic search via Qdrant — visual frames only
-        query_vector = await self.embedding_service.generate_text_embedding(request.query)
+        # Semantic search via pgvector — visual frames only
+        try:
+            query_vector = await self.embedding_service.generate_text_embedding(request.query)
+        except EmbeddingUnavailableError as exc:
+            from fastapi import HTTPException, status
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Search is temporarily unavailable. Please try again later.",
+            ) from exc
 
         video_id_strs = [str(v) for v in request.video_ids] if request.video_ids else None
         raw_results = vector_db.search(
@@ -42,34 +49,18 @@ class SearchService:
             source_type_filter="local",
         )
 
-        # Enrich results with video titles
+        # Enrich results with video titles and short-lived signed URLs (Blob SAS only).
         gcs_enabled = GCSClient.is_enabled()
         results: list[SearchResultItem] = []
         for r in raw_results:
             video_title = r.payload.get("video_title", "Unknown")
-            frame_path = r.payload.get("frame_path", "")
-
             frame_id = r.payload.get("frame_id") or r.frame_id
 
-            # Resolve frame/thumbnail URLs — GCS first when enabled
             gcs_frame = r.payload.get("gcs_frame_path")
             gcs_thumb = r.payload.get("gcs_thumb_path")
 
-            # Frame URL
-            if gcs_frame and gcs_enabled:
-                frame_url = GCSClient.get().generate_signed_url(gcs_frame)
-            elif frame_path:
-                frame_url = f"/storage/frames/{frame_path}"
-            else:
-                frame_url = ""
-
-            # Thumbnail URL
-            if gcs_thumb and gcs_enabled:
-                thumbnail_url = GCSClient.get().generate_signed_url(gcs_thumb)
-            elif r.payload.get("thumbnail_path"):
-                thumbnail_url = f"/storage/frames/{r.payload['thumbnail_path']}"
-            else:
-                thumbnail_url = None
+            frame_url = GCSClient.get().generate_signed_url(gcs_frame) if (gcs_frame and gcs_enabled) else ""
+            thumbnail_url = GCSClient.get().generate_signed_url(gcs_thumb) if (gcs_thumb and gcs_enabled) else None
 
             results.append(SearchResultItem(
                 frame_id=frame_id,
@@ -87,11 +78,8 @@ class SearchService:
 
         search_time_ms = int((time.time() - start_time) * 1000)
 
-        # Record search history
+        # Record search history (the quota was already reserved up-front)
         await self._record_search(user_id, request, len(results), results[0].score if results else 0, search_time_ms)
-
-        # Increment search count
-        await self._increment_search_count(user_id)
 
         # Get updated quota
         quota = await self.get_quota(user_id)
@@ -151,9 +139,17 @@ class SearchService:
         self.db.add(history)
         await self.db.flush()
 
-    async def _increment_search_count(self, user_id: UUID):
-        result = await self.db.execute(select(User).where(User.user_id == user_id))
-        user = result.scalar_one_or_none()
-        if user:
-            user.monthly_search_count = (user.monthly_search_count or 0) + 1
-            await self.db.flush()
+    async def _reserve_search(self, user_id: UUID) -> bool:
+        """Atomically consume one search if under the monthly limit (-1 = unlimited).
+        Returns False without changing anything when the quota is exhausted."""
+        from sqlalchemy import text
+
+        result = await self.db.execute(
+            text(
+                "UPDATE users SET monthly_search_count = monthly_search_count + 1 "
+                "WHERE user_id = :uid AND (monthly_search_limit = -1 "
+                "OR monthly_search_count < monthly_search_limit)"
+            ),
+            {"uid": str(user_id)},
+        )
+        return result.rowcount > 0

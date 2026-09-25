@@ -4,6 +4,18 @@ AI-powered video search platform. Find any moment in your videos using natural l
 
 Upload videos → AI extracts frames & generates embeddings → Search by describing what you're looking for → Jump to the exact timestamp.
 
+## Current web development
+
+The current web app lives in `web/` and uses Google OAuth cookie sessions, FastAPI,
+PostgreSQL with pgvector, and Azure Blob Storage (Azurite locally). Follow
+[DEPLOY.md](DEPLOY.md) for current setup and workstation ports. The mobile-era
+architecture and setup below describe the previous client and infrastructure.
+
+Local validation covers Google sign-in, session persistence, direct uploads,
+video playback, and the backend test suite. AI processing/search still require
+Azure AI endpoints, and paid checkout requires Stripe configuration. R2 storage
+and hosted Supabase PostgreSQL are planned follow-up integrations.
+
 ## Architecture
 
 ```
