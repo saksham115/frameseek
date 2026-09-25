@@ -61,4 +61,4 @@ class TestDashboard:
 
     async def test_dashboard_unauthenticated(self, client):
         resp = await client.get(URL)
-        assert resp.status_code == 403
+        assert resp.status_code == 401

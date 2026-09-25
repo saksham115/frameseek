@@ -12,7 +12,6 @@ from app.models.job import Job
 from app.models.search_history import SearchHistory
 from app.models.user import User
 from app.models.video import Video
-from app.utils.security import hash_password
 
 
 async def create_user(
@@ -20,19 +19,18 @@ async def create_user(
     *,
     email: str | None = None,
     name: str = "Factory User",
-    password: str = "testpassword123",
     plan_type: str = "free",
     storage_used_bytes: int = 0,
-    daily_search_count: int = 0,
+    monthly_search_count: int = 0,
     search_count_reset_at: datetime | None = None,
 ) -> User:
     user = User(
         email=email or f"user-{uuid.uuid4().hex[:8]}@test.com",
         name=name,
-        password_hash=hash_password(password),
+        google_id=f"g-{uuid.uuid4().hex}",
         plan_type=plan_type,
         storage_used_bytes=storage_used_bytes,
-        daily_search_count=daily_search_count,
+        monthly_search_count=monthly_search_count,
         search_count_reset_at=search_count_reset_at,
     )
     db.add(user)

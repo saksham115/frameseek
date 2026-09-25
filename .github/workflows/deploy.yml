@@ -1,0 +1,108 @@
+name: Validate & Deploy
+
+# Builds the API/worker and web images in ACR, runs DB migrations, and rolls the
+# Container Apps. Uses OIDC federated credentials (no stored cloud secrets).
+#
+# Required repo configuration:
+#   vars:    AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID,
+#            ACR_NAME, RESOURCE_GROUP, API_APP, WORKER_JOB, WEB_APP
+on:
+  push:
+    branches: [main, 'codex/**']
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: Deploy an already configured Azure environment
+        type: boolean
+        default: false
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  test-backend:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql+asyncpg://frameseek:frameseek_dev@localhost:5432/frameseek_test
+      REDIS_URL: redis://localhost:6379
+      JWT_SECRET_KEY: ci-tests-only-not-a-production-secret
+      DEBUG: 'true'
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: frameseek
+          POSTGRES_PASSWORD: frameseek_dev
+          POSTGRES_DB: frameseek_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U frameseek -d frameseek_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements-test.txt
+      - run: python -m compileall app
+      - run: pytest -q
+        continue-on-error: false
+
+  test-web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - run: bunx tsc --noEmit -p tsconfig.app.json
+      - run: bun run build
+
+  build-and-deploy:
+    if: github.event_name == 'workflow_dispatch' && inputs.deploy
+    needs: [test-backend, test-web]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Build images in ACR
+        run: |
+          TAG=${GITHUB_SHA::8}
+          az acr build -r ${{ vars.ACR_NAME }} -t frameseek-api:$TAG -t frameseek-api:latest ./backend
+          az acr build -r ${{ vars.ACR_NAME }} -t frameseek-web:$TAG -t frameseek-web:latest ./web
+
+      - name: Run database migrations
+        run: |
+          TAG=${GITHUB_SHA::8}
+          az containerapp job create \
+            --name migrate-$TAG --resource-group ${{ vars.RESOURCE_GROUP }} \
+            --environment $(az containerapp show -n ${{ vars.API_APP }} -g ${{ vars.RESOURCE_GROUP }} --query properties.environmentId -o tsv) \
+            --trigger-type Manual --replica-timeout 600 --replica-retry-limit 1 \
+            --image ${{ vars.ACR_NAME }}.azurecr.io/frameseek-api:$TAG \
+            --command "alembic" "upgrade" "head" \
+            --registry-server ${{ vars.ACR_NAME }}.azurecr.io || true
+          az containerapp job start -n migrate-$TAG -g ${{ vars.RESOURCE_GROUP }}
+
+      - name: Deploy API, worker, and web
+        run: |
+          TAG=${GITHUB_SHA::8}
+          REG=${{ vars.ACR_NAME }}.azurecr.io
+          az containerapp update -n ${{ vars.API_APP }} -g ${{ vars.RESOURCE_GROUP }} --image $REG/frameseek-api:$TAG
+          az containerapp job update -n ${{ vars.WORKER_JOB }} -g ${{ vars.RESOURCE_GROUP }} --image $REG/frameseek-api:$TAG
+          az containerapp update -n ${{ vars.WEB_APP }} -g ${{ vars.RESOURCE_GROUP }} --image $REG/frameseek-web:$TAG

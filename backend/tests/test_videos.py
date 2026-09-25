@@ -1,4 +1,3 @@
-import io
 import uuid
 from datetime import datetime, timezone
 
@@ -7,15 +6,8 @@ from tests.factories import create_frame, create_job, create_video
 URL = "/api/v1/videos"
 
 
-def _upload_form(*, title: str | None = None, folder_id: str | None = None, auto_process: bool = False):
-    """Helper to build multipart upload kwargs."""
-    data = {"auto_process": str(auto_process).lower()}
-    if title is not None:
-        data["title"] = title
-    if folder_id is not None:
-        data["folder_id"] = folder_id
-    files = {"file": ("sample.mp4", io.BytesIO(b"\x00" * 1024), "video/mp4")}
-    return {"data": data, "files": files}
+def _upload_request(**overrides):
+    return {"filename": "sample.mp4", "size_bytes": 1024, "content_type": "video/mp4", **overrides}
 
 
 # ── List Videos ─────────────────────────────────────────────────────────────
@@ -103,56 +95,76 @@ class TestListVideos:
 
     async def test_list_unauthenticated(self, client):
         resp = await client.get(URL)
-        assert resp.status_code == 403
+        assert resp.status_code == 401
 
 
 # ── Upload ──────────────────────────────────────────────────────────────────
 
 class TestUploadVideo:
     async def test_upload_success(self, client, test_user):
-        resp = await client.post(URL, headers=test_user["headers"], **_upload_form())
+        resp = await client.post(f"{URL}/upload-url", headers=test_user["headers"], json=_upload_request())
         assert resp.status_code == 200
         data = resp.json()["data"]
-        assert data["video"]["status"] == "uploaded"
-        assert data["video"]["original_filename"] == "sample.mp4"
+        assert data["upload_url"] == "https://storage.test/upload"
+        detail = await client.get(f"{URL}/{data['video_id']}", headers=test_user["headers"])
+        assert detail.json()["data"]["video"]["original_filename"] == "sample.mp4"
+        client.mock_enqueue.assert_not_awaited()
 
     async def test_upload_custom_title(self, client, test_user):
-        resp = await client.post(URL, headers=test_user["headers"], **_upload_form(title="My Title"))
+        target = await client.post(f"{URL}/upload-url", headers=test_user["headers"], json=_upload_request())
+        video_id = target.json()["data"]["video_id"]
+        resp = await client.patch(f"{URL}/{video_id}", headers=test_user["headers"], json={"title": "My Title"})
         assert resp.json()["data"]["video"]["title"] == "My Title"
 
     async def test_upload_default_title_from_filename(self, client, test_user):
-        resp = await client.post(URL, headers=test_user["headers"], **_upload_form())
+        target = await client.post(f"{URL}/upload-url", headers=test_user["headers"], json=_upload_request())
+        video_id = target.json()["data"]["video_id"]
+        resp = await client.get(f"{URL}/{video_id}", headers=test_user["headers"])
         assert resp.json()["data"]["video"]["title"] == "sample"
 
     async def test_upload_with_folder(self, client, test_user, test_folder):
-        resp = await client.post(
-            URL, headers=test_user["headers"],
-            **_upload_form(folder_id=str(test_folder.folder_id)),
+        target = await client.post(
+            f"{URL}/upload-url", headers=test_user["headers"],
+            json=_upload_request(folder_id=str(test_folder.folder_id)),
         )
+        video_id = target.json()["data"]["video_id"]
+        resp = await client.get(f"{URL}/{video_id}", headers=test_user["headers"])
         assert resp.json()["data"]["video"]["folder_id"] == str(test_folder.folder_id)
 
-    async def test_upload_with_auto_process(self, client, test_user):
-        resp = await client.post(URL, headers=test_user["headers"], **_upload_form(auto_process=True))
-        data = resp.json()["data"]
-        assert data["job"] is not None
-        assert data["job"]["status"] == "queued"
-
-    async def test_upload_file_saved_to_disk(self, client, test_user):
-        resp = await client.post(URL, headers=test_user["headers"], **_upload_form())
+    async def test_finalize_reserves_actual_size_and_enqueues(self, client, db_session, test_user):
+        target = await client.post(f"{URL}/upload-url", headers=test_user["headers"], json=_upload_request())
+        video_id = target.json()["data"]["video_id"]
+        client.mock_blob.get_blob_size.return_value = 2048
+        resp = await client.post(f"{URL}/{video_id}/finalize", headers=test_user["headers"])
         assert resp.status_code == 200
-        # Metadata extraction was called
-        client.mock_extract_metadata.assert_called()
+        data = resp.json()["data"]
+        assert data["status"] == "queued"
+        assert data["file_size_bytes"] == 2048
+        await db_session.refresh(test_user["user"])
+        assert test_user["user"].storage_used_bytes == 2048
+        client.mock_enqueue.assert_awaited_once()
 
-    async def test_upload_metadata_extracted(self, client, test_user):
-        resp = await client.post(URL, headers=test_user["headers"], **_upload_form())
-        video = resp.json()["data"]["video"]
-        assert video["width"] == 1920
-        assert video["height"] == 1080
-        assert video["codec"] == "h264"
+    async def test_finalize_requires_uploaded_blob(self, client, db_session, test_user):
+        target = await client.post(f"{URL}/upload-url", headers=test_user["headers"], json=_upload_request())
+        video_id = target.json()["data"]["video_id"]
+        client.mock_blob.blob_exists.return_value = False
+        resp = await client.post(f"{URL}/{video_id}/finalize", headers=test_user["headers"])
+        assert resp.status_code == 400
+        client.mock_enqueue.assert_not_awaited()
+        await db_session.refresh(test_user["user"])
+        assert test_user["user"].storage_used_bytes == 0
+
+    async def test_upload_too_large(self, client, test_user):
+        resp = await client.post(
+            f"{URL}/upload-url", headers=test_user["headers"],
+            json=_upload_request(size_bytes=501 * 1024 * 1024),
+        )
+        assert resp.status_code == 413
+        client.mock_blob.generate_upload_sas.assert_not_called()
 
     async def test_upload_unauthenticated(self, client):
-        resp = await client.post(URL, **_upload_form())
-        assert resp.status_code == 403
+        resp = await client.post(f"{URL}/upload-url", json=_upload_request())
+        assert resp.status_code == 401
 
 
 # ── Video Detail ────────────────────────────────────────────────────────────
@@ -223,6 +235,29 @@ class TestDeleteVideo:
 # ── Process Video ───────────────────────────────────────────────────────────
 
 class TestProcessVideo:
+    async def test_job_is_visible_before_enqueue(self, client, test_user, test_video):
+        from sqlalchemy import text
+        from tests.conftest import TestingSessionLocal
+
+        async def verify_job(job_id):
+            async with TestingSessionLocal() as observer:
+                state = await observer.execute(text("SELECT status FROM jobs WHERE job_id = :id"), {"id": uuid.UUID(job_id)})
+                assert state.scalar_one() == "queued"
+
+        client.mock_enqueue.side_effect = verify_job
+        resp = await client.post(f"{URL}/{test_video.video_id}/process", headers=test_user["headers"])
+        assert resp.status_code == 200
+        client.mock_enqueue.assert_awaited_once()
+
+    async def test_queue_failure_is_persisted(self, client, test_user, test_video):
+        client.mock_enqueue.side_effect = RuntimeError("queue unavailable")
+        resp = await client.post(f"{URL}/{test_video.video_id}/process", headers=test_user["headers"])
+        assert resp.status_code == 503
+        detail = await client.get(f"{URL}/{test_video.video_id}", headers=test_user["headers"])
+        assert detail.json()["data"]["video"]["status"] == "error"
+        jobs = await client.get("/api/v1/jobs", headers=test_user["headers"])
+        assert jobs.json()["data"]["jobs"][0]["status"] == "failed"
+
     async def test_process_success(self, client, test_user, test_video):
         resp = await client.post(f"{URL}/{test_video.video_id}/process", headers=test_user["headers"])
         assert resp.status_code == 200

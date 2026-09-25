@@ -1,42 +1,99 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+import secrets
+from urllib.parse import urlencode
+
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.user import User
-from app.schemas.auth import AcceptTosRequest, AppleSignInRequest, AuthResponse, DeleteAccountRequest, DemoSignInRequest, GoogleSignInRequest, LogoutRequest, RefreshRequest, Tokens, UserResponse
+from app.schemas.auth import AcceptTosRequest, DeleteAccountRequest, UserResponse
 from app.schemas.common import ApiResponse
-from app.services.auth_service import AuthService
+from app.services.auth_service import AuthService, SessionTokens
 
 router = APIRouter()
 
+_GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
+_STATE_COOKIE = "fs_oauth_state"
 
-@router.post("/google", response_model=ApiResponse[AuthResponse])
-async def google_sign_in(data: GoogleSignInRequest, db: AsyncSession = Depends(get_db)):
+
+def _cookie_kwargs() -> dict:
+    kwargs = {"httponly": True, "secure": settings.COOKIE_SECURE, "samesite": "lax"}
+    if settings.COOKIE_DOMAIN:
+        kwargs["domain"] = settings.COOKIE_DOMAIN
+    return kwargs
+
+
+def _set_session_cookies(response: Response, tokens: SessionTokens) -> None:
+    response.set_cookie(
+        settings.ACCESS_COOKIE_NAME, tokens.access_token,
+        max_age=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60, path="/", **_cookie_kwargs(),
+    )
+    response.set_cookie(
+        settings.REFRESH_COOKIE_NAME, tokens.refresh_token,
+        max_age=settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS * 24 * 3600, path="/", **_cookie_kwargs(),
+    )
+
+
+def _clear_session_cookies(response: Response) -> None:
+    domain = settings.COOKIE_DOMAIN or None
+    response.delete_cookie(settings.ACCESS_COOKIE_NAME, path="/", domain=domain)
+    response.delete_cookie(settings.REFRESH_COOKIE_NAME, path="/", domain=domain)
+
+
+@router.get("/google/start")
+async def google_start():
+    state = secrets.token_urlsafe(24)
+    params = {
+        "client_id": settings.GOOGLE_CLIENT_ID,
+        "redirect_uri": settings.GOOGLE_OAUTH_REDIRECT_URI,
+        "response_type": "code",
+        "scope": "openid email profile",
+        "state": state,
+        "access_type": "offline",
+        "prompt": "select_account",
+    }
+    response = RedirectResponse(f"{_GOOGLE_AUTH_URL}?{urlencode(params)}")
+    # Double-submit state: store it in a short-lived cookie validated on callback.
+    response.set_cookie(_STATE_COOKIE, state, max_age=600, httponly=True,
+                        secure=settings.COOKIE_SECURE, samesite="lax", path="/")
+    return response
+
+
+@router.get("/google/callback")
+async def google_callback(request: Request, code: str = "", state: str = "", db: AsyncSession = Depends(get_db)):
+    expected = request.cookies.get(_STATE_COOKIE)
+    if not code or not state or state != expected:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid OAuth state")
+
     service = AuthService(db)
-    result = await service.google_sign_in(data.id_token, data.name)
-    return ApiResponse(data=result)
+    user = await service.exchange_google_code(code)
+    tokens = await service.issue_session(user)
+
+    response = RedirectResponse(settings.FRONTEND_URL)
+    _set_session_cookies(response, tokens)
+    response.delete_cookie(_STATE_COOKIE, path="/")
+    return response
 
 
-@router.post("/apple", response_model=ApiResponse[AuthResponse])
-async def apple_sign_in(data: AppleSignInRequest, db: AsyncSession = Depends(get_db)):
-    service = AuthService(db)
-    result = await service.apple_sign_in(data.identity_token, data.name)
-    return ApiResponse(data=result)
+@router.post("/refresh")
+async def refresh(request: Request, response: Response, db: AsyncSession = Depends(get_db)):
+    token = request.cookies.get(settings.REFRESH_COOKIE_NAME)
+    if not token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="No refresh token")
+    tokens = await AuthService(db).refresh(token)
+    _set_session_cookies(response, tokens)
+    return ApiResponse(data={"success": True})
 
 
-@router.post("/demo", response_model=ApiResponse[AuthResponse])
-async def demo_sign_in(data: DemoSignInRequest, db: AsyncSession = Depends(get_db)):
-    service = AuthService(db)
-    result = await service.demo_sign_in(data.email, data.password)
-    return ApiResponse(data=result)
-
-
-@router.post("/refresh", response_model=ApiResponse[Tokens])
-async def refresh(data: RefreshRequest, db: AsyncSession = Depends(get_db)):
-    service = AuthService(db)
-    result = await service.refresh(data.refresh_token)
-    return ApiResponse(data=result)
+@router.post("/logout")
+async def logout(request: Request, response: Response, db: AsyncSession = Depends(get_db)):
+    token = request.cookies.get(settings.REFRESH_COOKIE_NAME)
+    await AuthService(db).logout(token)
+    _clear_session_cookies(response)
+    return ApiResponse(data={"success": True})
 
 
 @router.get("/me", response_model=ApiResponse[UserResponse])
@@ -52,23 +109,30 @@ async def accept_tos(
 ):
     if not data.accepted:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Terms must be accepted")
-    service = AuthService(db)
-    result = await service.accept_tos(current_user.user_id)
+    result = await AuthService(db).accept_tos(current_user.user_id)
     return ApiResponse(data=result)
 
 
-@router.post("/logout")
-async def logout(data: LogoutRequest):
-    # In a production system, we'd blacklist the refresh token
-    return ApiResponse(data={"success": True})
-
-
-@router.delete("/account")
+@router.delete("/me")
 async def delete_account(
-    data: DeleteAccountRequest,
+    request: Request,
+    response: Response,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    reason = "user_request"
+    feedback = None
+    try:
+        body = await request.json()
+        if isinstance(body, dict):
+            parsed = DeleteAccountRequest(**body)
+            reason, feedback = parsed.reason, parsed.feedback
+    except Exception:
+        pass  # body is optional for web deletion
+
     service = AuthService(db)
-    await service.delete_account(current_user.user_id, reason=data.reason, feedback=data.feedback)
+    await service.delete_account(current_user.user_id, reason=reason, feedback=feedback)
+    token = request.cookies.get(settings.REFRESH_COOKIE_NAME)
+    await service.logout(token)
+    _clear_session_cookies(response)
     return ApiResponse(data={"success": True})

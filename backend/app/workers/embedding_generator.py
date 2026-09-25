@@ -18,7 +18,7 @@ class EmbeddingGenerator:
         frames: list[dict],
         progress_callback: Callable | None = None,
     ) -> int:
-        """Generate embeddings for frames and store in Qdrant."""
+        """Generate embeddings for frames and store in pgvector."""
         points: list[EmbeddingPoint] = []
         total = len(frames)
 
@@ -54,7 +54,7 @@ class EmbeddingGenerator:
             if progress_callback:
                 progress_callback((i + 1) / total)
 
-        # Batch upsert to Qdrant
+        # Batch upsert to pgvector
         if points:
             vector_db.upsert_embeddings(user_id, points)
 
@@ -69,7 +69,7 @@ class EmbeddingGenerator:
         frames: list[dict],
         progress_callback: Callable | None = None,
     ) -> int:
-        """Generate embeddings for transcript chunks and store in Qdrant."""
+        """Generate embeddings for transcript chunks and store in pgvector."""
         if not chunks:
             return 0
 

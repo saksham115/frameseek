@@ -4,6 +4,10 @@ from uuid import UUID
 from pydantic import BaseModel
 
 
+class PaymentConfigResponse(BaseModel):
+    payments_enabled: bool
+
+
 class SubscriptionDetail(BaseModel):
     subscription_id: UUID | None = None
     status: str | None = None

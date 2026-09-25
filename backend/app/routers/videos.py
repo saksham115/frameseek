@@ -1,11 +1,10 @@
 import math
-from pathlib import Path
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
+from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import settings
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.user import User
@@ -20,7 +19,6 @@ from app.schemas.video import (
     VideoListResponse,
     VideoResponse,
     VideoUpdateRequest,
-    VideoUploadResponse,
 )
 from app.services.job_service import JobService
 from app.services.video_service import VideoService
@@ -30,24 +28,24 @@ from app.utils.url_helpers import resolve_storage_url
 router = APIRouter()
 
 
+class UploadUrlRequest(BaseModel):
+    filename: str
+    size_bytes: int
+    content_type: str | None = None
+    folder_id: UUID | None = None
+
+
 def _to_video_response(video) -> VideoResponse:
-    """Build VideoResponse with server-side video_url and thumbnail_url."""
+    """Build VideoResponse with server-side, short-lived signed URLs (Blob SAS only)."""
     resp = VideoResponse.model_validate(video)
-
-    # Compute video URL (signed GCS URL or local /storage/ path)
     resp.video_url = resolve_storage_url(video.file_path, video.gcs_path)
-
-    # Compute thumbnail URL — GCS first when enabled, local fallback
-    if video.video_id:
-        if video.gcs_path and GCSClient.is_enabled():
+    if video.video_id and video.gcs_path and GCSClient.is_enabled():
+        try:
             resp.thumbnail_url = GCSClient.get().generate_signed_url(
                 f"frames/{video.video_id}/thumb_000000.jpg"
             )
-        else:
-            thumb_path = Path(settings.STORAGE_BASE_PATH).resolve() / "frames" / str(video.video_id) / "thumb_000000.jpg"
-            if thumb_path.exists():
-                resp.thumbnail_url = f"/storage/frames/{video.video_id}/thumb_000000.jpg"
-
+        except Exception:
+            resp.thumbnail_url = None
     return resp
 
 
@@ -74,29 +72,31 @@ async def list_videos(
     ))
 
 
-@router.post("", response_model=ApiResponse[VideoUploadResponse])
-async def upload_video(
-    file: UploadFile = File(...),
-    title: str | None = Form(None),
-    folder_id: UUID | None = Form(None),
-    local_uri: str | None = Form(None),
-    thumbnail_uri: str | None = Form(None),
-    auto_process: bool = Form(False),
-    frame_interval: float = Form(2.0),
+@router.post("/upload-url")
+async def create_upload_url(
+    body: UploadUrlRequest,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    """Step 1 of upload: get a video id + a short-lived SAS PUT URL for direct-to-Blob upload."""
     service = VideoService(db)
-    video = await service.upload_video(file, user.user_id, title, folder_id, local_uri, thumbnail_uri)
+    video, upload_url = await service.create_upload_target(
+        user.user_id, body.filename, body.size_bytes, body.content_type, body.folder_id
+    )
+    return ApiResponse(data={"video_id": str(video.video_id), "upload_url": upload_url})
 
-    job = None
-    if auto_process:
-        job_service = JobService(db)
-        job_model = await job_service.create_processing_job(video.video_id, user.user_id, frame_interval)
-        from app.schemas.video import JobBriefResponse
-        job = JobBriefResponse.model_validate(job_model)
 
-    return ApiResponse(data=VideoUploadResponse(video=_to_video_response(video), job=job))
+@router.post("/{video_id}/finalize", response_model=ApiResponse[VideoResponse])
+async def finalize_upload(
+    video_id: UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Step 2 of upload: confirm the blob, reserve quota, and start processing."""
+    service = VideoService(db)
+    video = await service.finalize_upload(video_id, user.user_id)
+    await JobService(db).create_processing_job(video_id, user.user_id)
+    return ApiResponse(data=_to_video_response(video))
 
 
 @router.get("/{video_id}", response_model=ApiResponse[VideoDetailResponse])

@@ -17,6 +17,7 @@ from app.models.frame import Frame
 from app.models.job import Job
 from app.models.transcript import TranscriptSegment
 from app.models.video import Video
+from app.repositories.vector_db import vector_db
 from app.utils.gcs_client import GCSClient
 from app.workers.audio_transcriber import AudioTranscriber
 from app.workers.embedding_generator import EmbeddingGenerator
@@ -42,9 +43,10 @@ async def process_video(job_id: str):
             logger.error(f"Video {job.video_id} not found")
             return
 
+        source_tmp: str | None = None
+        vid = str(video.video_id)[:8]
         try:
             pipeline_start = time.time()
-            vid = str(video.video_id)[:8]
             file_size_mb = (video.file_size_bytes or 0) / (1024 ** 2)
             logger.info(
                 f"[{vid}] ▶ Starting pipeline | video=\"{video.title}\" "
@@ -58,13 +60,45 @@ async def process_video(job_id: str):
             video.status = "processing"
             await db.commit()
 
+            # Idempotency: a retry (or re-process) must not duplicate data. Clear any
+            # frames, transcript segments and vectors from a previous run first.
+            await _reset_derived_data(db, video)
+
+            # Resolve the source video. Uploads land directly in Blob, so download it to
+            # a temp file when there's no usable local copy.
+            source_path = video.file_path
+            if (not source_path or not Path(source_path).exists()) and GCSClient.is_enabled() and video.gcs_path:
+                source_tmp = tempfile.mkdtemp()
+                ext = Path(video.gcs_path).suffix or ".mp4"
+                source_path = os.path.join(source_tmp, f"source{ext}")
+                await asyncio.to_thread(GCSClient.get().download_file, video.gcs_path, source_path)
+                logger.info(f"[{vid}] Downloaded source video from Blob")
+            if not source_path or not Path(source_path).exists():
+                raise RuntimeError("Source video is not available for processing")
+
+            # Populate metadata (duration/fps/dimensions) from the source — uploads arrive
+            # via Blob so this can't happen at upload time anymore.
+            try:
+                from app.utils.video_metadata import extract_metadata
+
+                meta = await asyncio.to_thread(extract_metadata, source_path)
+                video.duration_seconds = meta.duration_seconds
+                video.fps = meta.fps
+                video.width = meta.width
+                video.height = meta.height
+                video.codec = meta.codec
+                await db.commit()
+            except Exception:
+                logger.exception(f"[{vid}] metadata extraction failed (non-fatal)")
+
             # Step 1: Extract frames (0 → 30%)
             step_start = time.time()
             logger.info(f"[{vid}] Step 1/5: Extracting frames (interval={job.frame_interval_seconds}s)")
             extractor = FrameExtractor(str(settings.storage_path / "frames"))
 
-            extracted = extractor.extract_frames(
-                video_path=video.file_path,
+            extracted = await asyncio.to_thread(
+                extractor.extract_frames,
+                video_path=source_path,
                 video_id=str(video.video_id),
                 interval_seconds=job.frame_interval_seconds,
             )
@@ -80,27 +114,32 @@ async def process_video(job_id: str):
             video.processing_progress = 30
             await db.commit()
 
-            # Upload frames to GCS if enabled
+            # Upload frames to Blob if enabled (blocking I/O — run off the event loop)
             frame_gcs_paths: dict[int, str] = {}
             if GCSClient.is_enabled():
                 step_start = time.time()
-                logger.info(f"[{vid}] Step 2/5: Uploading {len(extracted)} frames to GCS")
-                gcs = GCSClient.get()
-                for ef in extracted:
-                    frame_gcs = f"frames/{video.video_id}/frame_{ef.frame_index:06d}.jpg"
-                    gcs.upload_file(ef.local_path, frame_gcs, content_type="image/jpeg")
-                    frame_gcs_paths[ef.frame_index] = frame_gcs
-                    # Upload thumbnail
-                    thumb_local = ef.local_path.replace("frame_", "thumb_")
-                    thumb_gcs = f"frames/{video.video_id}/thumb_{ef.frame_index:06d}.jpg"
-                    if Path(thumb_local).exists():
-                        gcs.upload_file(thumb_local, thumb_gcs, content_type="image/jpeg")
+                logger.info(f"[{vid}] Step 2/5: Uploading {len(extracted)} frames to Blob")
+
+                def _upload_frames() -> dict[int, str]:
+                    gcs = GCSClient.get()
+                    paths: dict[int, str] = {}
+                    for ef in extracted:
+                        frame_gcs = f"frames/{video.video_id}/frame_{ef.frame_index:06d}.jpg"
+                        gcs.upload_file(ef.local_path, frame_gcs, content_type="image/jpeg")
+                        paths[ef.frame_index] = frame_gcs
+                        thumb_local = ef.local_path.replace("frame_", "thumb_")
+                        thumb_gcs = f"frames/{video.video_id}/thumb_{ef.frame_index:06d}.jpg"
+                        if Path(thumb_local).exists():
+                            gcs.upload_file(thumb_local, thumb_gcs, content_type="image/jpeg")
+                    return paths
+
+                frame_gcs_paths = await asyncio.to_thread(_upload_frames)
                 logger.info(
-                    f"[{vid}] Step 2/5: Done — {len(frame_gcs_paths)} frames uploaded to GCS "
+                    f"[{vid}] Step 2/5: Done — {len(frame_gcs_paths)} frames uploaded to Blob "
                     f"in {time.time() - step_start:.1f}s"
                 )
             else:
-                logger.info(f"[{vid}] Step 2/5: GCS disabled, skipping upload")
+                logger.info(f"[{vid}] Step 2/5: Blob disabled, skipping upload")
 
             # Save frame records to DB (30 → 40%)
             step_start = time.time()
@@ -144,7 +183,7 @@ async def process_video(job_id: str):
             step_start = time.time()
             logger.info(f"[{vid}] Step 3/5: Transcribing audio")
             transcript_chunks = []
-            await _transcribe_audio(db, video, frame_dicts, transcript_chunks)
+            await _transcribe_audio(db, video, frame_dicts, transcript_chunks, video_path=source_path)
             logger.info(
                 f"[{vid}] Step 3/5: Done — status={video.transcript_status}, "
                 f"{len(transcript_chunks)} chunks in {time.time() - step_start:.1f}s"
@@ -259,6 +298,23 @@ async def process_video(job_id: str):
             video.processing_progress = 0
             video.error_message = str(e)
             await db.commit()
+        finally:
+            if source_tmp and Path(source_tmp).exists():
+                shutil.rmtree(source_tmp, ignore_errors=True)
+
+
+async def _reset_derived_data(db: AsyncSession, video: Video) -> None:
+    """Make reprocessing idempotent: drop frames, transcript segments and vectors from any
+    previous run before the pipeline regenerates them."""
+    from sqlalchemy import delete
+
+    await db.execute(delete(Frame).where(Frame.video_id == video.video_id))
+    await db.execute(delete(TranscriptSegment).where(TranscriptSegment.video_id == video.video_id))
+    await db.commit()
+    try:
+        vector_db.delete_by_video_id(str(video.user_id), str(video.video_id))
+    except Exception:
+        logger.exception("Failed to clear prior vectors for video %s", video.video_id)
 
 
 async def _transcribe_audio(
@@ -279,7 +335,7 @@ async def _transcribe_audio(
             await db.commit()
 
             with tempfile.TemporaryDirectory() as tmp_dir:
-                result = transcriber.transcribe_video(source_path, tmp_dir)
+                result = await asyncio.to_thread(transcriber.transcribe_video, source_path, tmp_dir)
 
             if result is None:
                 # No audio track

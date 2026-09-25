@@ -4,35 +4,6 @@ from uuid import UUID
 from pydantic import BaseModel
 
 
-class GoogleSignInRequest(BaseModel):
-    id_token: str
-    name: str | None = None
-
-
-class AppleSignInRequest(BaseModel):
-    identity_token: str
-    name: str | None = None
-
-
-class DemoSignInRequest(BaseModel):
-    email: str
-    password: str
-
-
-class RefreshRequest(BaseModel):
-    refresh_token: str
-
-
-class LogoutRequest(BaseModel):
-    refresh_token: str
-
-
-class Tokens(BaseModel):
-    access_token: str
-    refresh_token: str
-    expires_in: int
-
-
 class UserResponse(BaseModel):
     user_id: UUID
     email: str
@@ -51,11 +22,6 @@ class AcceptTosRequest(BaseModel):
     accepted: bool = True
 
 
-class AuthResponse(BaseModel):
-    user: UserResponse
-    tokens: Tokens
-
-
 class DeleteAccountRequest(BaseModel):
-    reason: str
+    reason: str = "user_request"
     feedback: str | None = None

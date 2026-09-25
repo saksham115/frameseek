@@ -8,7 +8,7 @@ URL = "/api/v1/search"
 
 
 def _make_mock_result(video_id: str | None = None, score: float = 0.85):
-    """Create a mock Qdrant search result."""
+    """Create a mock vector search result."""
     vid = video_id or str(uuid.uuid4())
     r = MagicMock()
     r.frame_id = str(uuid.uuid4())
@@ -29,6 +29,16 @@ def _make_mock_result(video_id: str | None = None, score: float = 0.85):
 # ── Search ──────────────────────────────────────────────────────────────────
 
 class TestSearch:
+    async def test_unavailable_embeddings_returns_503_without_charging_quota(self, client, db_session, test_user):
+        from app.services.embedding_service import EmbeddingUnavailableError
+
+        client.mock_embed_service.return_value.generate_text_embedding.side_effect = EmbeddingUnavailableError("Not configured")
+        resp = await client.post(URL, json={"query": "a blue frame"}, headers=test_user["headers"])
+        assert resp.status_code == 503
+        assert "temporarily unavailable" in resp.json()["detail"]
+        await db_session.refresh(test_user["user"])
+        assert test_user["user"].monthly_search_count == 0
+
     async def test_search_empty_results(self, client, test_user):
         resp = await client.post(URL, json={"query": "find a dog"}, headers=test_user["headers"])
         assert resp.status_code == 200
@@ -47,7 +57,7 @@ class TestSearch:
     async def test_search_increments_quota(self, client, db_session, test_user):
         await client.post(URL, json={"query": "test search"}, headers=test_user["headers"])
         await db_session.refresh(test_user["user"])
-        assert test_user["user"].daily_search_count >= 1
+        assert test_user["user"].monthly_search_count >= 1
 
     async def test_search_records_history(self, client, db_session, test_user):
         await client.post(URL, json={"query": "recorded query"}, headers=test_user["headers"])
@@ -59,8 +69,8 @@ class TestSearch:
 
     async def test_search_quota_exceeded(self, client, db_session, test_user):
         user = test_user["user"]
-        user.daily_search_count = 50
-        user.daily_search_limit = 50
+        user.monthly_search_count = 50
+        user.monthly_search_limit = 50
         user.search_count_reset_at = datetime.now(timezone.utc)
         await db_session.flush()
         await db_session.commit()
@@ -68,13 +78,12 @@ class TestSearch:
         resp = await client.post(URL, json={"query": "over limit"}, headers=test_user["headers"])
         assert resp.status_code == 429
 
-    async def test_search_daily_reset(self, client, db_session, test_user):
-        """Quota resets when the date rolls over."""
+    async def test_search_monthly_reset(self, client, db_session, test_user):
+        """Quota resets at the start of a new calendar month."""
         user = test_user["user"]
-        user.daily_search_count = 50
-        user.daily_search_limit = 50
-        # Set reset_at to yesterday
-        user.search_count_reset_at = datetime.now(timezone.utc) - timedelta(days=1)
+        user.monthly_search_count = 50
+        user.monthly_search_limit = 50
+        user.search_count_reset_at = datetime.now(timezone.utc).replace(day=1) - timedelta(days=1)
         await db_session.flush()
         await db_session.commit()
 
@@ -101,7 +110,7 @@ class TestSearch:
 
     async def test_search_unauthenticated(self, client):
         resp = await client.post(URL, json={"query": "test"})
-        assert resp.status_code == 403
+        assert resp.status_code == 401
 
 
 # ── History ─────────────────────────────────────────────────────────────────
@@ -145,12 +154,12 @@ class TestSearchQuota:
         assert resp.status_code == 200
         data = resp.json()["data"]
         assert data["used"] == 0
-        assert data["limit"] == 50
-        assert data["remaining"] == 50
+        assert data["limit"] == 20
+        assert data["remaining"] == 20
 
     async def test_quota_after_searches(self, client, db_session, test_user):
         user = test_user["user"]
-        user.daily_search_count = 10
+        user.monthly_search_count = 10
         user.search_count_reset_at = datetime.now(timezone.utc)
         await db_session.flush()
         await db_session.commit()
@@ -158,16 +167,27 @@ class TestSearchQuota:
         resp = await client.get(f"{URL}/quota", headers=test_user["headers"])
         data = resp.json()["data"]
         assert data["used"] == 10
-        assert data["remaining"] == 40
+        assert data["remaining"] == 10
 
-    async def test_quota_daily_reset(self, client, db_session, test_user):
+    async def test_quota_monthly_reset(self, client, db_session, test_user):
         user = test_user["user"]
-        user.daily_search_count = 30
-        user.search_count_reset_at = datetime.now(timezone.utc) - timedelta(days=1)
+        user.monthly_search_count = 30
+        user.search_count_reset_at = datetime.now(timezone.utc).replace(day=1) - timedelta(days=1)
         await db_session.flush()
         await db_session.commit()
 
         resp = await client.get(f"{URL}/quota", headers=test_user["headers"])
         data = resp.json()["data"]
         assert data["used"] == 0
-        assert data["remaining"] == 50
+        assert data["remaining"] == 20
+
+    async def test_quota_does_not_reset_within_month(self, client, db_session, test_user):
+        user = test_user["user"]
+        user.monthly_search_count = 20
+        user.search_count_reset_at = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        await db_session.commit()
+
+        resp = await client.post(URL, json={"query": "over limit"}, headers=test_user["headers"])
+        assert resp.status_code == 429
+        await db_session.refresh(user)
+        assert user.monthly_search_count == 20

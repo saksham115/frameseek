@@ -1,6 +1,14 @@
+"""Transcription — Azure OpenAI Whisper (replaces the self-hosted Whisper model).
+
+``extract_audio`` (ffmpeg) is unchanged; ``transcribe`` now calls the Azure OpenAI
+Whisper deployment with verbose_json to get per-segment timings. No model weights ship
+in the container. Auth via managed identity.
+"""
+
+from __future__ import annotations
+
 import logging
 import subprocess
-import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -8,7 +16,8 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-_whisper_model = None
+_TOKEN_SCOPE = "https://cognitiveservices.azure.com/.default"
+_client = None
 
 
 @dataclass
@@ -26,93 +35,79 @@ class TranscriptionResult:
     language: str
 
 
+def _get_client():
+    global _client
+    if _client is None:
+        from azure.identity import DefaultAzureCredential, get_bearer_token_provider
+        from openai import AzureOpenAI
+
+        token_provider = get_bearer_token_provider(DefaultAzureCredential(), _TOKEN_SCOPE)
+        _client = AzureOpenAI(
+            azure_endpoint=settings.AZURE_OPENAI_ENDPOINT,
+            azure_ad_token_provider=token_provider,
+            api_version=settings.AZURE_OPENAI_API_VERSION,
+        )
+    return _client
+
+
 class WhisperService:
-    """Self-hosted Whisper transcription with lazy-loaded singleton model."""
-
-    def _get_model(self):
-        global _whisper_model
-        if _whisper_model is None:
-            import whisper
-            logger.info(f"Loading Whisper model: {settings.WHISPER_MODEL_SIZE} on {settings.WHISPER_DEVICE}")
-            _whisper_model = whisper.load_model(settings.WHISPER_MODEL_SIZE, device=settings.WHISPER_DEVICE)
-            logger.info("Whisper model loaded")
-        return _whisper_model
-
     def extract_audio(self, video_path: str, output_dir: str) -> str | None:
-        """Extract 16kHz mono WAV from video using ffmpeg.
-
-        Returns the audio file path, or None if the video has no audio track.
-        """
+        """Extract 16kHz mono WAV; returns None if the video has no audio track."""
         output_path = str(Path(output_dir) / "audio.wav")
 
-        # First check if video has an audio stream
         probe_cmd = [
-            "ffprobe", "-v", "error",
-            "-select_streams", "a",
-            "-show_entries", "stream=codec_type",
-            "-of", "csv=p=0",
-            video_path,
+            "ffprobe", "-v", "error", "-select_streams", "a",
+            "-show_entries", "stream=codec_type", "-of", "csv=p=0", video_path,
         ]
         try:
             result = subprocess.run(probe_cmd, capture_output=True, text=True, timeout=30)
             if not result.stdout.strip():
-                logger.info(f"No audio track found in {video_path}")
+                logger.info("No audio track found in %s", video_path)
                 return None
         except (subprocess.TimeoutExpired, FileNotFoundError) as e:
-            logger.warning(f"ffprobe failed: {e}")
+            logger.warning("ffprobe failed: %s", e)
             return None
 
-        # Extract audio as 16kHz mono WAV
         extract_cmd = [
-            "ffmpeg", "-y",
-            "-i", video_path,
-            "-vn",
-            "-acodec", "pcm_s16le",
-            "-ar", "16000",
-            "-ac", "1",
-            output_path,
+            "ffmpeg", "-y", "-i", video_path, "-vn",
+            "-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1", output_path,
         ]
         try:
             subprocess.run(extract_cmd, capture_output=True, text=True, timeout=300, check=True)
             return output_path
         except subprocess.CalledProcessError as e:
-            logger.error(f"ffmpeg audio extraction failed: {e.stderr}")
+            logger.error("ffmpeg audio extraction failed: %s", e.stderr)
             raise RuntimeError(f"Audio extraction failed: {e.stderr}")
         except subprocess.TimeoutExpired:
             raise RuntimeError("Audio extraction timed out")
 
     def transcribe(self, audio_path: str, language: str | None = None) -> TranscriptionResult:
-        """Run Whisper transcription on an audio file."""
-        model = self._get_model()
-
-        transcribe_kwargs = {
-            "fp16": False,
-            "verbose": False,
-        }
+        client = _get_client()
+        kwargs: dict = {"response_format": "verbose_json"}
         if language:
-            transcribe_kwargs["language"] = language
-        elif settings.WHISPER_LANGUAGE:
-            transcribe_kwargs["language"] = settings.WHISPER_LANGUAGE
+            kwargs["language"] = language
 
-        result = model.transcribe(audio_path, **transcribe_kwargs)
-        detected_language = result.get("language", "en")
+        with open(audio_path, "rb") as fh:
+            result = client.audio.transcriptions.create(
+                model=settings.AZURE_OPENAI_WHISPER_DEPLOYMENT,
+                file=fh,
+                **kwargs,
+            )
 
-        # Whisper often falsely detects Chinese when uncertain — re-run as English
-        if not language and not settings.WHISPER_LANGUAGE and detected_language == "zh":
-            logger.info("Auto-detect returned 'zh', re-transcribing as English")
-            result = model.transcribe(audio_path, fp16=False, verbose=False, language="en")
-            detected_language = "en"
+        detected_language = getattr(result, "language", None) or language or "en"
+        segments: list[WhisperSegment] = []
+        for seg in getattr(result, "segments", None) or []:
+            # Segments come back as objects or dicts depending on SDK version.
+            get = (lambda k, d=None: seg.get(k, d)) if isinstance(seg, dict) else (lambda k, d=None: getattr(seg, k, d))
+            segments.append(
+                WhisperSegment(
+                    index=int(get("id", 0)),
+                    start=float(get("start", 0.0)),
+                    end=float(get("end", 0.0)),
+                    text=str(get("text", "")).strip(),
+                    avg_logprob=float(get("avg_logprob", 0.0)),
+                )
+            )
 
-        segments = []
-        for seg in result.get("segments", []):
-            segments.append(WhisperSegment(
-                index=seg["id"],
-                start=seg["start"],
-                end=seg["end"],
-                text=seg["text"].strip(),
-                avg_logprob=seg.get("avg_logprob", 0.0),
-            ))
-
-        logger.info(f"Transcribed {len(segments)} segments, language: {detected_language}")
-
+        logger.info("Transcribed %d segments, language: %s", len(segments), detected_language)
         return TranscriptionResult(segments=segments, language=detected_language)

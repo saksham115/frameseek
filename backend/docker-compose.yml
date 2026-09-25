@@ -1,8 +1,12 @@
+# Local dev infrastructure. Ports bound to loopback only.
+# Postgres ships with pgvector; Azurite emulates Blob Storage.
+# Redis is NOT here — use your host Redis on :6379 (REDIS_URL=redis://localhost:6379).
+# If you don't have one: `brew install redis && brew services start redis`.
 services:
   postgres:
-    image: postgres:15
+    image: pgvector/pgvector:pg16
     ports:
-      - "5432:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     environment:
       POSTGRES_DB: frameseek
       POSTGRES_USER: frameseek
@@ -15,34 +19,15 @@ services:
       timeout: 5s
       retries: 5
 
-  redis:
-    image: redis:7-alpine
+  # Blob Storage emulator. Create containers once after it starts (see DEPLOY.md).
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite
+    command: "azurite-blob --blobHost 0.0.0.0 --blobPort 10000 --skipApiVersionCheck"
     ports:
-      - "6379:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-  qdrant:
-    image: qdrant/qdrant:latest
-    ports:
-      - "6333:6333"
-      - "6334:6334"
+      - "127.0.0.1:10000:10000"
     volumes:
-      - qdrant_data:/qdrant/storage
-
-  pgweb:
-    image: sosedoff/pgweb
-    ports:
-      - "8082:8081"
-    environment:
-      PGWEB_DATABASE_URL: postgres://frameseek:frameseek_dev@postgres:5432/frameseek?sslmode=disable
-    depends_on:
-      postgres:
-        condition: service_healthy
+      - azurite_data:/data
 
 volumes:
   postgres_data:
-  qdrant_data:
+  azurite_data:
