@@ -92,6 +92,10 @@ class Settings(BaseSettings):
     # ---- Billing (Stripe, replaces Apple/Google IAP) ----
     STRIPE_SECRET_KEY: str = ""
     STRIPE_WEBHOOK_SECRET: str = ""
+    STRIPE_PRICE_PRO_MONTHLY: str = ""
+    STRIPE_PRICE_PRO_ANNUAL: str = ""
+    STRIPE_PRICE_PRO_MAX_MONTHLY: str = ""
+    STRIPE_PRICE_PRO_MAX_ANNUAL: str = ""
 
     # ---- App ----
     FRONTEND_URL: str = "http://localhost:8080"

@@ -1,6 +1,7 @@
-import os
 from dataclasses import dataclass
 from enum import Enum
+
+from app.config import settings
 
 
 class PlanType(str, Enum):
@@ -24,24 +25,22 @@ PLAN_CONFIGS: dict[PlanType, PlanConfig] = {
 }
 
 
-# Stripe price IDs come from the environment (they differ per Stripe account/mode).
+# Stripe price IDs come from settings, including the local .env file.
 # Each plan can have monthly and annual prices. Any that map to a paid plan let the
 # webhook resolve which plan a Stripe subscription grants.
 def _price_env(plan: PlanType, interval: str) -> str | None:
-    return os.getenv(f"STRIPE_PRICE_{plan.name}_{interval.upper()}") or None
+    return getattr(settings, f"STRIPE_PRICE_{plan.name}_{interval.upper()}", "") or None
 
 
-PLAN_PRICES: dict[PlanType, dict[str, str | None]] = {
-    PlanType.PRO: {"monthly": _price_env(PlanType.PRO, "monthly"), "annual": _price_env(PlanType.PRO, "annual")},
-    PlanType.PRO_MAX: {
-        "monthly": _price_env(PlanType.PRO_MAX, "monthly"),
-        "annual": _price_env(PlanType.PRO_MAX, "annual"),
-    },
-}
+def _plan_prices() -> dict[PlanType, dict[str, str | None]]:
+    return {
+        plan: {interval: _price_env(plan, interval) for interval in ("monthly", "annual")}
+        for plan in (PlanType.PRO, PlanType.PRO_MAX)
+    }
 
 
 def price_to_plan(price_id: str) -> PlanType:
-    for plan, prices in PLAN_PRICES.items():
+    for plan, prices in _plan_prices().items():
         if price_id in (prices.get("monthly"), prices.get("annual")):
             return plan
     return PlanType.FREE
@@ -59,7 +58,7 @@ def public_plans() -> list[dict]:
     out: list[dict] = []
     for plan in (PlanType.FREE, PlanType.PRO, PlanType.PRO_MAX):
         cfg = PLAN_CONFIGS[plan]
-        prices = PLAN_PRICES.get(plan, {})
+        prices = _plan_prices().get(plan, {})
         out.append({
             "id": plan.value,
             "name": cfg.name,
