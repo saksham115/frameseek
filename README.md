@@ -12,9 +12,14 @@ PostgreSQL with pgvector, and Azure Blob Storage (Azurite locally). Follow
 architecture and setup below describe the previous client and infrastructure.
 
 Local validation covers Google sign-in, session persistence, direct uploads,
-video playback, and the backend test suite. AI processing/search still require
-Azure AI endpoints, and paid checkout requires Stripe configuration. R2 storage
-and hosted Supabase PostgreSQL are planned follow-up integrations.
+Azure transcription and visual search, video playback, and the backend test suite.
+Payments are disabled by default with `PAYMENTS_ENABLED=false`; billing controls
+are hidden and Stripe checkout, portal, and webhook requests return HTTP 503.
+Stripe keys are optional while disabled. To enable payments, configure Stripe keys
+and price IDs, set `PAYMENTS_ENABLED=true` in the backend environment, and restart
+the API. The web app reads the flag from `/api/v1/subscriptions/config`.
+Plan limits still apply while payments are disabled. R2 storage and hosted
+Supabase PostgreSQL are planned follow-up integrations.
 
 ## Architecture
 

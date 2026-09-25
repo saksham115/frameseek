@@ -27,6 +27,8 @@ logger = logging.getLogger(__name__)
 
 
 def _stripe():
+    if not settings.PAYMENTS_ENABLED:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Payments are currently disabled.")
     import stripe
 
     stripe.api_key = settings.STRIPE_SECRET_KEY
@@ -88,9 +90,9 @@ class SubscriptionService:
         return session.url
 
     async def create_portal_session(self, user: User) -> str:
+        stripe = _stripe()
         if not user.stripe_customer_id:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No billing account yet")
-        stripe = _stripe()
         session = await asyncio.to_thread(
             stripe.billing_portal.Session.create,
             customer=user.stripe_customer_id,

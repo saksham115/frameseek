@@ -90,6 +90,7 @@ class Settings(BaseSettings):
     REFRESH_COOKIE_NAME: str = "fs_refresh"
 
     # ---- Billing (Stripe, replaces Apple/Google IAP) ----
+    PAYMENTS_ENABLED: bool = False
     STRIPE_SECRET_KEY: str = ""
     STRIPE_WEBHOOK_SECRET: str = ""
     STRIPE_PRICE_PRO_MONTHLY: str = ""
@@ -128,8 +129,8 @@ class Settings(BaseSettings):
         if not self.DEBUG:
             if not self.AZURE_STORAGE_ACCOUNT_URL:
                 raise RuntimeError("AZURE_STORAGE_ACCOUNT_URL must be set in production.")
-            if not self.STRIPE_SECRET_KEY or not self.STRIPE_WEBHOOK_SECRET:
-                raise RuntimeError("Stripe keys must be set in production.")
+            if self.PAYMENTS_ENABLED and (not self.STRIPE_SECRET_KEY or not self.STRIPE_WEBHOOK_SECRET):
+                raise RuntimeError("Stripe keys must be set in production when payments are enabled.")
             if not self.GOOGLE_CLIENT_ID or not self.GOOGLE_CLIENT_SECRET:
                 raise RuntimeError("Google OAuth credentials must be set in production.")
 

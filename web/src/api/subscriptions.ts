@@ -1,6 +1,11 @@
 import { api } from "./client";
 import type { Plan } from "./types";
 
+export async function getPaymentConfig(): Promise<{ payments_enabled: boolean }> {
+  const { data } = await api.get<{ payments_enabled: boolean }>("/subscriptions/config");
+  return data;
+}
+
 export async function listPlans(): Promise<Plan[]> {
   const { data } = await api.get<Plan[]>("/subscriptions/plans");
   return data;

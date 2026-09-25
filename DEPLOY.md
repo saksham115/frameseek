@@ -6,7 +6,8 @@ Two tracks: a **local dev loop** for fast iteration, and a **full Azure deploy**
 > transcription) call Azure AI Vision and Azure OpenAI. There's no local emulator for
 > those, so full video processing needs real Azure AI endpoints (reachable from your
 > machine via `az login`). The API and web UI run locally. Google login needs a web
-> OAuth client id/secret, and billing needs Stripe test keys. R2 and Supabase are
+> OAuth client id/secret. Payments default to disabled; enabling billing needs Stripe
+> test keys and `PAYMENTS_ENABLED=true`. R2 and Supabase are
 > planned hosted replacements; local development currently uses Azurite and Postgres.
 
 ## Current workstation
@@ -37,13 +38,15 @@ Use `localhost` consistently for the browser and OAuth callback so cookies match
 The local API health check is `curl http://localhost:8001/health`.
 Google login is configured locally and its callback/session flow has been verified.
 On another machine, set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` and register
-the callback on the OAuth web client. AI endpoints and Stripe test keys are not
-configured yet. Original video playback works after upload even if AI processing fails.
+the callback on the OAuth web client. Azure transcription and visual search have
+passed a live synthetic-video test locally. Payments are disabled; Stripe test keys
+are not configured. Original video playback works even if AI processing fails.
 
 The dedicated `frameseek_test` database is initialized. Run
 `venv/bin/python -m pytest -q` from `backend/` to test against it; this suite
 drops/recreates its tables. Tests include actual pgvector SQL, cookie-session
-rotation/revocation, and queue visibility; Azure AI and Stripe are not live-tested.
+rotation/revocation, queue visibility, and the payments flag. Automated tests mock
+Azure AI and Stripe; the separate manual Azure test used live services.
 
 ---
 
@@ -118,11 +121,20 @@ embedding step.)
 
 ### 5. Stripe (optional, local)
 
+Leave `PAYMENTS_ENABLED=false` to hide billing in the web app and block Stripe calls.
+Checkout, portal, and webhook routes return HTTP 503 while disabled; webhook events
+are not acknowledged, so Stripe can retry them. This flag does not cancel existing
+Stripe subscriptions or change plan quotas. Production startup does not require
+Stripe keys while payments are disabled.
+
+When ready to test payments:
+
 ```bash
 stripe login
 stripe listen --forward-to localhost:8000/api/v1/subscriptions/webhook
 # put the printed whsec_... into STRIPE_WEBHOOK_SECRET, and your sk_test_... into STRIPE_SECRET_KEY
 # create test products/prices, set STRIPE_PRICE_PRO_MONTHLY=price_... etc.
+# set PAYMENTS_ENABLED=true in backend/.env and restart the API
 ```
 
 ### 6. Tests
@@ -219,8 +231,9 @@ az containerapp update -n <API_APP> -g $RG --image <ACR_NAME>.azurecr.io/framese
 ### 6. External wiring
 
 - **Google**: add the prod redirect URI (`https://api.frameseek.in/...callback`).
-- **Stripe**: add a webhook endpoint → `https://api.frameseek.in/api/v1/subscriptions/webhook`,
-  create products/prices, put the price IDs in the env vars above.
+- **Stripe (when enabling payments)**: add a webhook endpoint → `https://api.frameseek.in/api/v1/subscriptions/webhook`,
+  create products/prices, put the price IDs in the env vars above, and set
+  `PAYMENTS_ENABLED=true` on the API. Keep it false to launch with payments disabled.
 - **DNS / TLS**: point `app.` and `api.` at the Container Apps ingress; add Front Door + WAF
   (hardening, see `infra/README.md`).
 
@@ -229,4 +242,5 @@ az containerapp update -n <API_APP> -g $RG --image <ACR_NAME>.azurecr.io/framese
 ```bash
 curl https://api.frameseek.in/health          # {"api":"ok","postgres":"ok"}
 ```
-Then in the browser: Google login → upload → process → search → checkout.
+Then in the browser: Google login → upload → process → search. Test checkout only
+when payments are enabled.

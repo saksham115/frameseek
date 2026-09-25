@@ -4,11 +4,12 @@ from fastapi import APIRouter, Depends, Header, Request
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.user import User
 from app.schemas.common import ApiResponse
-from app.schemas.subscription import SubscriptionStatusResponse
+from app.schemas.subscription import PaymentConfigResponse, SubscriptionStatusResponse
 from app.services.subscription_service import SubscriptionService
 
 logger = logging.getLogger(__name__)
@@ -18,6 +19,11 @@ router = APIRouter()
 
 class CheckoutRequest(BaseModel):
     price_id: str
+
+
+@router.get("/config", response_model=ApiResponse[PaymentConfigResponse])
+async def payment_config():
+    return ApiResponse(data=PaymentConfigResponse(payments_enabled=settings.PAYMENTS_ENABLED))
 
 
 @router.get("/plans")

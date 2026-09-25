@@ -1,8 +1,8 @@
 import { Link } from "react-router-dom";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useAuth } from "@/store/auth";
-import { openBillingPortal } from "@/api/subscriptions";
+import { getPaymentConfig, openBillingPortal } from "@/api/subscriptions";
 import { api } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -21,6 +21,7 @@ import { formatBytes } from "@/lib/format";
 
 const Settings = () => {
   const { user, logout } = useAuth();
+  const { data: paymentConfig } = useQuery({ queryKey: ["payment-config"], queryFn: getPaymentConfig });
 
   const portal = useMutation({
     mutationFn: openBillingPortal,
@@ -61,20 +62,22 @@ const Settings = () => {
         <Progress className="mt-3" value={usedFraction} />
       </section>
 
-      <section className="rounded-2xl border border-border bg-card p-6 flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-semibold">Billing</h2>
-          <p className="text-sm text-muted-foreground">Manage or upgrade your subscription.</p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" asChild>
-            <Link to="/upgrade">Plans</Link>
-          </Button>
-          <Button onClick={() => portal.mutate()} disabled={portal.isPending}>
-            Manage
-          </Button>
-        </div>
-      </section>
+      {paymentConfig?.payments_enabled && (
+        <section className="rounded-2xl border border-border bg-card p-6 flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-semibold">Billing</h2>
+            <p className="text-sm text-muted-foreground">Manage or upgrade your subscription.</p>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" asChild>
+              <Link to="/upgrade">Plans</Link>
+            </Button>
+            <Button onClick={() => portal.mutate()} disabled={portal.isPending}>
+              Manage
+            </Button>
+          </div>
+        </section>
+      )}
 
       <section className="rounded-2xl border border-destructive/30 bg-card p-6">
         <h2 className="text-lg font-semibold text-destructive">Danger zone</h2>

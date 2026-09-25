@@ -1,14 +1,20 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import { Check } from "lucide-react";
 import { toast } from "sonner";
-import { listPlans, startCheckout } from "@/api/subscriptions";
+import { getPaymentConfig, listPlans, startCheckout } from "@/api/subscriptions";
 import type { Plan } from "@/api/types";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/store/auth";
 
 const Paywall = () => {
   const { user } = useAuth();
-  const { data: plans, isLoading } = useQuery({ queryKey: ["plans"], queryFn: listPlans });
+  const { data: paymentConfig, isLoading: paymentsLoading } = useQuery({
+    queryKey: ["payment-config"], queryFn: getPaymentConfig,
+  });
+  const { data: plans, isLoading } = useQuery({
+    queryKey: ["plans"], queryFn: listPlans, enabled: paymentConfig?.payments_enabled === true,
+  });
 
   const checkout = useMutation<string, unknown, string>({
     mutationFn: (priceId) => startCheckout(priceId),
@@ -20,6 +26,18 @@ const Paywall = () => {
     `${p.storage_gb} GB storage`,
     `${p.monthly_searches.toLocaleString()} searches / month`,
   ];
+
+  if (paymentsLoading) return <p className="text-center text-muted-foreground">Loading plans…</p>;
+
+  if (!paymentConfig?.payments_enabled) {
+    return (
+      <div className="max-w-xl mx-auto text-center space-y-4">
+        <h1 className="text-3xl font-bold tracking-tight">Payments are currently unavailable</h1>
+        <p className="text-muted-foreground">You can continue using FrameSeek on your current plan.</p>
+        <Button asChild><Link to="/">Back to library</Link></Button>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-4xl mx-auto">
