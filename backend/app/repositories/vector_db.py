@@ -61,7 +61,15 @@ class VectorDB:
         if self._engine is None:
             with self._lock:
                 if self._engine is None:
-                    self._engine = create_engine(_sync_url(), pool_size=5, max_overflow=5, pool_pre_ping=True)
+                    import ssl
+
+                    connect_args = {}
+                    if settings.DATABASE_SSL:
+                        connect_args = {"sslmode": "verify-full", "sslrootcert": ssl.get_default_verify_paths().cafile}
+                    self._engine = create_engine(
+                        _sync_url(), pool_size=2, max_overflow=3,
+                        pool_pre_ping=True, connect_args=connect_args,
+                    )
         return self._engine
 
     def _ensure_schema(self) -> None:

@@ -14,14 +14,16 @@ param delegatedSubnetId string
 
 @description('Private DNS zone for the flexible server.')
 param privateDnsZoneId string
+param skuName string = 'Standard_D2ds_v5'
+param skuTier string = 'GeneralPurpose'
 
 resource server 'Microsoft.DBforPostgreSQL/flexibleServers@2024-08-01' = {
   name: 'psql-${namePrefix}-${resourceToken}'
   location: location
   tags: tags
   sku: {
-    name: 'Standard_D2ds_v5'
-    tier: 'GeneralPurpose'
+    name: skuName
+    tier: skuTier
   }
   properties: {
     version: '16'

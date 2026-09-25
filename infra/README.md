@@ -1,5 +1,10 @@
 # FrameSeek — Azure Infrastructure (Bicep)
 
+The current deployment uses `production.bicep` and `production-apps.bicep` in
+resource group `frameseek-prod`, Central India. See [DEPLOY.md](../DEPLOY.md) for the
+validated deployment procedure. It uses Azure Managed Redis and reuses existing AI
+resources. The older `main.bicep` scaffold documented below is retained for reference.
+
 Phase 0 foundation for the web rebuild. Provisions everything the API, worker, and web app
 need, in the EU, with managed identity everywhere (no key files).
 

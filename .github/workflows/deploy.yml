@@ -5,7 +5,7 @@ name: Validate & Deploy
 #
 # Required repo configuration:
 #   vars:    AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID,
-#            ACR_NAME, RESOURCE_GROUP, API_APP, WORKER_JOB, WEB_APP
+#            ACR_NAME, RESOURCE_GROUP, API_APP, WORKER_JOB, WEB_APP, MIGRATION_JOB
 on:
   push:
     branches: [main, 'codex/**']
@@ -89,15 +89,21 @@ jobs:
 
       - name: Run database migrations
         run: |
+          set -euo pipefail
           TAG=${GITHUB_SHA::8}
-          az containerapp job create \
-            --name migrate-$TAG --resource-group ${{ vars.RESOURCE_GROUP }} \
-            --environment $(az containerapp show -n ${{ vars.API_APP }} -g ${{ vars.RESOURCE_GROUP }} --query properties.environmentId -o tsv) \
-            --trigger-type Manual --replica-timeout 600 --replica-retry-limit 1 \
+          az containerapp job update \
+            --name ${{ vars.MIGRATION_JOB }} --resource-group ${{ vars.RESOURCE_GROUP }} \
             --image ${{ vars.ACR_NAME }}.azurecr.io/frameseek-api:$TAG \
-            --command "alembic" "upgrade" "head" \
-            --registry-server ${{ vars.ACR_NAME }}.azurecr.io || true
-          az containerapp job start -n migrate-$TAG -g ${{ vars.RESOURCE_GROUP }}
+            --command alembic upgrade head --output none
+          EXECUTION=$(az containerapp job start -n ${{ vars.MIGRATION_JOB }} -g ${{ vars.RESOURCE_GROUP }} --query name -o tsv)
+          for attempt in $(seq 1 90); do
+            STATUS=$(az containerapp job execution show -n ${{ vars.MIGRATION_JOB }} -g ${{ vars.RESOURCE_GROUP }} --job-execution-name "$EXECUTION" --query properties.status -o tsv)
+            if [ "$STATUS" = Succeeded ]; then exit 0; fi
+            if [ "$STATUS" = Failed ]; then echo 'Migration failed; rollout stopped.'; exit 1; fi
+            sleep 10
+          done
+          echo 'Migration timed out; rollout stopped.'
+          exit 1
 
       - name: Deploy API, worker, and web
         run: |

@@ -4,6 +4,10 @@ __pycache__/
 *.pyo
 venv/
 .env
+.env.*
+!.env.example
+!.env.production.example
+infra/.deployment/
 
 # Secrets
 service-account.json

@@ -7,6 +7,7 @@ param resourceToken string
 
 @description('Managed identity principal granted Storage Blob Data Contributor.')
 param principalId string
+param allowedOrigins array = []
 
 resource account 'Microsoft.Storage/storageAccounts@2023-05-01' = {
   name: 'st${namePrefix}${resourceToken}'
@@ -34,10 +35,9 @@ resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2023-05-01'
   name: 'default'
   properties: {
     cors: {
-      corsRules: [
+      corsRules: empty(allowedOrigins) ? [] : [
         {
-          // Tighten allowedOrigins to the app domain once known.
-          allowedOrigins: [ '*' ]
+          allowedOrigins: allowedOrigins
           allowedMethods: [ 'GET', 'PUT', 'HEAD' ]
           allowedHeaders: [ '*' ]
           exposedHeaders: [ '*' ]

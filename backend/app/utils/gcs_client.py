@@ -93,7 +93,8 @@ class GCSClient:
         now = datetime.now(timezone.utc)
         if self._delegation_key is None or now >= self._delegation_expiry - timedelta(minutes=5):
             start = now - timedelta(minutes=5)
-            expiry = now + timedelta(hours=1)
+            # The delegation key must cover the entire upload/read SAS lifetime.
+            expiry = now + timedelta(minutes=max(settings.SAS_EXPIRY_MINUTES, settings.UPLOAD_SAS_EXPIRY_MINUTES) + 10)
             self._delegation_key = self._svc.get_user_delegation_key(start, expiry)
             self._delegation_expiry = expiry
         return self._delegation_key

@@ -7,8 +7,8 @@ Two tracks: a **local dev loop** for fast iteration, and a **full Azure deploy**
 > those, so full video processing needs real Azure AI endpoints (reachable from your
 > machine via `az login`). The API and web UI run locally. Google login needs a web
 > OAuth client id/secret. Payments default to disabled; enabling billing needs Stripe
-> test keys and `PAYMENTS_ENABLED=true`. R2 and Supabase are
-> planned hosted replacements; local development currently uses Azurite and Postgres.
+> test keys and `PAYMENTS_ENABLED=true`. Production uses Azure Blob and Azure
+> PostgreSQL; local development uses Azurite and Postgres.
 
 ## Current workstation
 
@@ -147,100 +147,85 @@ pytest -q
 
 ---
 
-## B. Azure deploy
+## B. Azure production
 
-### 1. Prerequisites
+Production uses resource group `frameseek-prod` in Central India. The web app has
+public HTTPS ingress; the API and PostgreSQL are private to the Container Apps
+network. Blob containers are private and use short-lived user-delegation SAS URLs.
+The existing East US Vision and South India Whisper resources are reused.
+Payments remain disabled. Local development data is not copied to production.
 
-```bash
-az login
-az account set --subscription <sub-id>
-az provider register --namespace Microsoft.App
-az provider register --namespace Microsoft.ServiceBus
-# Request Azure OpenAI + AI Vision access on the subscription if not already granted.
-```
+App: https://frameseek-web.wittysmoke-b6d8c05c.centralindia.azurecontainerapps.io
 
-Verify model region availability first (see `infra/README.md` — the Whisper/AI-Vision check).
+### Provisioning
 
-### 2. Provision infrastructure
+`infra/production.bicep` creates PostgreSQL 16 with pgvector, Blob, Azure Managed
+Redis (Balanced B0), Service Bus, Key Vault, ACR, networking and the Container Apps
+environment. `infra/production-apps.bicep` deploys the web/API, event worker and a
+manual migration job. `infra/main.bicep` is the older, unused scaffold.
 
-```bash
-az group create -n rg-frameseek-prod -l westeurope
-az deployment group create -g rg-frameseek-prod \
-  -f infra/main.bicep -p @infra/main.parameters.json \
-  -p postgresAdminPassword="$(openssl rand -base64 24)"
-```
-
-Grab the outputs (`az deployment group show -g rg-frameseek-prod -n main --query properties.outputs`).
-
-### 3. Migrations + Key Vault secrets
+Initial deployment inputs are in ignored `infra/.deployment/` on the setup machine.
+The foundation parameter file includes the database password and must stay private.
+The app parameter file contains nonsecret resource configuration and an image tag.
+Do not recreate or rotate the database password inadvertently on repeat deployments.
 
 ```bash
-# Enable pgvector + run migrations (psql to the flexible server, then):
-alembic upgrade head
-
-KV=<keyVaultName from outputs>
-az keyvault secret set --vault-name $KV -n jwt-secret --value "$(openssl rand -hex 32)"
-az keyvault secret set --vault-name $KV -n postgres-connection-string \
-  --value "postgresql+asyncpg://fsadmin:<pw>@<postgresFqdn>/frameseek"
-az keyvault secret set --vault-name $KV -n google-oauth-client-secret --value "<...>"
-az keyvault secret set --vault-name $KV -n stripe-secret-key --value "sk_live_..."
-az keyvault secret set --vault-name $KV -n stripe-webhook-secret --value "whsec_..."
+az deployment group create -g frameseek-prod -n foundation \
+  -f infra/production.bicep -p @infra/.deployment/foundation.parameters.json
+az acr build -r acrfsg7unyr2nlrdvk -t frameseek-api:<tag> ./backend
+az acr build -r acrfsg7unyr2nlrdvk -t frameseek-web:<tag> ./web
+# Create/update the migration job first; it retains VNet access and managed identity.
+az deployment group create -g frameseek-prod -n migration-setup \
+  -f infra/production-apps.bicep -p @infra/.deployment/apps.parameters.json \
+  -p imageTag=<tag> deployServices=false
+az containerapp job start -g frameseek-prod -n frameseek-migrate
+# Check the execution reaches Succeeded before rolling the running application.
+az containerapp job execution list -g frameseek-prod -n frameseek-migrate -o table
+az deployment group create -g frameseek-prod -n applications \
+  -f infra/production-apps.bicep -p @infra/.deployment/apps.parameters.json -p imageTag=<tag>
 ```
 
-### 4. App environment variables
+The workload identity needs `Cognitive Services User` on `frameseek-cv-us` in resource
+group `frameseek` and `Cognitive Services OpenAI User` on
+`saksham115-9666-resource` in `kaapi-new`. Those resource-scoped assignments were
+created separately because the AI resources already existed.
 
-Secrets load from Key Vault automatically (config reads `AZURE_KEY_VAULT_URI`). Set the
-remaining **non-secret** config on the API app and worker job — these aren't in the Bicep
-by default:
+### Secrets and configuration
 
-```bash
-RG=rg-frameseek-prod
-az containerapp update -n <API_APP> -g $RG --set-env-vars \
-  DEBUG=false COOKIE_SECURE=true \
-  FRONTEND_URL=https://app.frameseek.in \
-  CORS_ORIGINS=https://app.frameseek.in \
-  GOOGLE_CLIENT_ID=<...> \
-  GOOGLE_OAUTH_REDIRECT_URI=https://api.frameseek.in/api/v1/auth/google/callback \
-  AZURE_STORAGE_ACCOUNT_URL=<blobEndpoint> \
-  AZURE_VISION_ENDPOINT=<visionEndpoint> \
-  AZURE_OPENAI_ENDPOINT=<openAiEndpoint> \
-  STRIPE_PRICE_PRO_MONTHLY=price_... STRIPE_PRICE_PRO_MAX_MONTHLY=price_...
-```
+Azure Key Vault `kv-fs-g7unyr2nlrdvk` holds:
 
-Add the same AI/storage/service-bus env vars to the worker job (`az containerapp job update`).
+| Key Vault name | Application setting |
+| --- | --- |
+| `postgres-connection-string` | `DATABASE_URL` |
+| `redis-connection-string` | `REDIS_URL` |
+| `jwt-secret` | `JWT_SECRET_KEY` |
+| `google-oauth-client-secret` | `GOOGLE_CLIENT_SECRET` |
 
-### 5. Build & deploy (CI)
+The API and jobs read these using their managed identity. AI and Blob also use
+managed identity, so no Azure API/storage keys are embedded in the application.
+After rotating a secret, restart the API revision; new job executions load the new
+value automatically. Optional local input `backend/.env.production` is git-ignored
+and is not packaged in either Docker image.
 
-Set these GitHub repo **variables** before requesting a deployment:
-`AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID, ACR_NAME, RESOURCE_GROUP,
-API_APP, WORKER_JOB, WEB_APP` (OIDC federated credential on the app registration).
+`production-apps.bicep` holds nonsecret environment settings: endpoints, Google
+client ID, callback URL, `DATABASE_SSL=true`, secure cookies and payments disabled.
+Blob CORS permits only the production web origin. The web nginx proxy forwards
+`/api/` to the private API, so browser cookies stay on one HTTPS origin.
 
-Pushes and pull requests run backend tests (with PostgreSQL/pgvector and Redis) and
-the web build/type check. Azure deployment is a separate manual workflow dispatch
-with `deploy` selected. The Azure scaffold still needs deployment validation,
-web Container App provisioning, and migration-job identity/configuration before
-it is ready to use. Its deployment steps build images in ACR, start the migration
-job, and roll the Container Apps. Manual image-build commands are:
+Google OAuth redirect URI:
+`https://frameseek-web.wittysmoke-b6d8c05c.centralindia.azurecontainerapps.io/api/v1/auth/google/callback`
 
-```bash
-az acr build -r <ACR_NAME> -t frameseek-api:latest ./backend
-az acr build -r <ACR_NAME> -t frameseek-web:latest ./web
-az containerapp update -n <API_APP> -g $RG --image <ACR_NAME>.azurecr.io/frameseek-api:latest
-```
+### Validation and subsequent releases
 
-### 6. External wiring
+Health: `https://frameseek-web.wittysmoke-b6d8c05c.centralindia.azurecontainerapps.io/health`.
+A manual job can run `python -m app.deployment_check` using the same environment and
+identity as the migration job. It creates a disposable account, uploads the bundled
+synthetic clip, waits for the actual queue worker, checks Whisper, visual search,
+signed frames and range playback, then removes its test data. A timed-out job keeps
+its own records for diagnosis. This does not replace a real Google browser login.
 
-- **Google**: add the prod redirect URI (`https://api.frameseek.in/...callback`).
-- **Stripe (when enabling payments)**: add a webhook endpoint → `https://api.frameseek.in/api/v1/subscriptions/webhook`,
-  create products/prices, put the price IDs in the env vars above, and set
-  `PAYMENTS_ENABLED=true` on the API. Keep it false to launch with payments disabled.
-- **DNS / TLS**: point `app.` and `api.` at the Container Apps ingress; add Front Door + WAF
-  (hardening, see `infra/README.md`).
-
-### 7. Smoke test
-
-```bash
-curl https://api.frameseek.in/health          # {"api":"ok","postgres":"ok"}
-```
-Then in the browser: Google login → upload → process → search. Test checkout only
-when payments are enabled.
+Pushes run tests; deployment remains manual. The GitHub workflow requires an Azure
+OIDC identity and repository variables `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`,
+`AZURE_SUBSCRIPTION_ID`, `ACR_NAME`, `RESOURCE_GROUP`, `API_APP`, `WORKER_JOB`,
+`WEB_APP`, and `MIGRATION_JOB`. It waits for successful migrations before rollout.
+OIDC setup is separate from this initial CLI deployment.

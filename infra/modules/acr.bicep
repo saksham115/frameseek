@@ -7,13 +7,14 @@ param resourceToken string
 
 @description('Managed identity principal granted AcrPull.')
 param principalId string
+param skuName string = 'Standard'
 
 resource registry 'Microsoft.ContainerRegistry/registries@2023-11-01-preview' = {
   name: 'acr${namePrefix}${resourceToken}'
   location: location
   tags: tags
   sku: {
-    name: 'Standard'
+    name: skuName
   }
   properties: {
     adminUserEnabled: false

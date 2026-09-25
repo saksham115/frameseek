@@ -51,6 +51,7 @@ _load_keyvault_into_env()
 class Settings(BaseSettings):
     # ---- Core data services ----
     DATABASE_URL: str = "postgresql+asyncpg://frameseek:frameseek_dev@localhost:5432/frameseek"
+    DATABASE_SSL: bool = False  # required for Azure PostgreSQL
     REDIS_URL: str = "redis://localhost:6379"
 
     # ---- Azure Blob Storage (replaces GCS) ----
@@ -108,6 +109,14 @@ class Settings(BaseSettings):
     PORT: int = 8000
     DEBUG: bool = True
     AZURE_KEY_VAULT_URI: str = ""
+
+    @property
+    def database_connect_args(self) -> dict:
+        if not self.DATABASE_SSL:
+            return {}
+        import ssl
+
+        return {"ssl": ssl.create_default_context()}
 
     @property
     def cors_origins_list(self) -> list[str]:

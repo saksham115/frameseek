@@ -24,8 +24,9 @@ are hidden and Stripe checkout, portal, and webhook requests return HTTP 503.
 Stripe keys are optional while disabled. To enable payments, configure Stripe keys
 and price IDs, set `PAYMENTS_ENABLED=true` in the backend environment, and restart
 the API. The web app reads the flag from `/api/v1/subscriptions/config`.
-Plan limits still apply while payments are disabled. R2 storage and hosted
-Supabase PostgreSQL are planned follow-up integrations.
+Plan limits still apply while payments are disabled. Production uses Azure Blob,
+Azure PostgreSQL with pgvector, Managed Redis and Container Apps; deployment details
+and secret locations are documented in [DEPLOY.md](DEPLOY.md).
 
 ## Architecture
 

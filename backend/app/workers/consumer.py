@@ -38,13 +38,13 @@ async def run() -> None:
         return
 
     from azure.identity.aio import DefaultAzureCredential
-    from azure.servicebus.aio import ServiceBusClient
+    from azure.servicebus.aio import AutoLockRenewer, ServiceBusClient
 
     credential = DefaultAzureCredential()
     processed = 0
     async with ServiceBusClient(settings.SERVICE_BUS_FQDN, credential) as client:
         receiver = client.get_queue_receiver(settings.SERVICE_BUS_QUEUE, max_wait_time=30)
-        async with receiver:
+        async with receiver, AutoLockRenewer(max_lock_renewal_duration=1800) as renewer:
             idle = 0
             while idle < _MAX_IDLE_RECEIVES:
                 messages = await receiver.receive_messages(max_message_count=1, max_wait_time=30)
@@ -54,6 +54,7 @@ async def run() -> None:
                 idle = 0
                 for msg in messages:
                     try:
+                        renewer.register(receiver, msg)
                         body = json.loads(str(msg))
                         await _handle(body)
                         await receiver.complete_message(msg)
