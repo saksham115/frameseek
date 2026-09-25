@@ -1448,6 +1448,60 @@ kbd {
   inset: 0;
   object-fit: contain;
   cursor: pointer;
+  transition: opacity 200ms ease;
+}
+.is-processing .player-stage video {
+  opacity: 0.25;
+  pointer-events: none;
+  cursor: default;
+}
+.is-processing .player-transport {
+  opacity: 0.45;
+}
+.player-processing-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 20px;
+  background: rgb(8 10 11 / 25%);
+  color: #f0f3f4;
+  text-align: center;
+}
+.player-processing-overlay > svg {
+  color: hsl(var(--primary));
+}
+.player-processing-overlay h2 {
+  font-size: 15px;
+  font-weight: 600;
+}
+.player-processing-overlay p {
+  max-width: 300px;
+  color: #b2babd;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.player-processing-progress {
+  width: min(200px, 80%);
+  height: 3px;
+  margin-top: 5px;
+  border-radius: 2px;
+  overflow: hidden;
+  background: rgb(255 255 255 / 12%);
+}
+.player-processing-progress > span {
+  display: block;
+  height: 100%;
+  background: hsl(var(--primary));
+  transition: width 300ms ease;
+}
+.player-processing-percent {
+  color: #b2babd;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 9px;
 }
 .player-message {
   display: flex;

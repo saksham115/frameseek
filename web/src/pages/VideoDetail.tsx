@@ -75,6 +75,11 @@ export default function VideoDetail() {
         : false,
   });
   const ready = video?.status === "completed";
+  const processing = ["uploaded", "queued", "processing"].includes(
+    video?.status ?? "",
+  );
+  const canPlay = !!video?.video_url && !mediaError && !processing;
+  const progress = Math.max(0, Math.min(100, video?.progress ?? 0));
   const {
     data: frameData,
     isLoading: framesLoading,
@@ -127,6 +132,7 @@ export default function VideoDetail() {
     setTab("clips");
   };
   const seekTo = (seconds: number, play = false) => {
+    if (!canPlay) return;
     stopClipPreview();
     const el = videoRef.current;
     if (!el) return;
@@ -143,6 +149,7 @@ export default function VideoDetail() {
     if (play) el.play().catch(() => undefined);
   };
   const previewClip = (range: ClipRange) => {
+    if (!canPlay) return;
     seekTo(range[0]);
     clipPreviewRef.current = range;
     setPreviewingClip(true);
@@ -181,12 +188,16 @@ export default function VideoDetail() {
     if (tab !== "clips" && clipPreviewRef.current) pausePlayer();
   }, [tab]);
   useEffect(() => {
+    if (!canPlay) pausePlayer();
+  }, [canPlay]);
+  useEffect(() => {
     setClipRange([0, 0]);
     stopClipPreview();
     setDuration(0);
     setMediaError(false);
   }, [id]);
   const togglePlayback = () => {
+    if (!canPlay) return;
     const el = videoRef.current;
     if (!el) return;
     if (el.paused)
@@ -197,8 +208,9 @@ export default function VideoDetail() {
   };
   useEffect(() => {
     seekTo(initialTime);
-  }, [initialTime, id]);
+  }, [initialTime, id, canPlay]);
   useEffect(() => {
+    if (!canPlay) return;
     const keydown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
       if (
@@ -225,7 +237,7 @@ export default function VideoDetail() {
     };
     window.addEventListener("keydown", keydown);
     return () => window.removeEventListener("keydown", keydown);
-  }, [fullDuration]);
+  }, [fullDuration, canPlay]);
   const runSearch = async () => {
     if (!query.trim() || isSearching || !ready) return;
     setSearchError(false);
@@ -368,7 +380,11 @@ export default function VideoDetail() {
               {video?.fps ? ` · ${Math.round(video.fps)} FPS` : ""}
             </span>
           </div>
-          <div className="player-window" ref={playerRef}>
+          <div
+            className={cn("player-window", processing && "is-processing")}
+            ref={playerRef}
+            aria-busy={processing}
+          >
             <div className="player-stage">
               {video?.video_url && !mediaError ? (
                 <video
@@ -382,19 +398,25 @@ export default function VideoDetail() {
                   preload="metadata"
                   onClick={togglePlayback}
                   aria-label={`Preview of ${video.title}`}
+                  aria-disabled={!canPlay}
                   onLoadedMetadata={(e) => {
                     const el = e.currentTarget;
                     setDuration(el.duration);
-                    el.currentTime = Math.min(
-                      pendingSeek.current ?? initialTime,
-                      el.duration || 0,
-                    );
+                    if (canPlay)
+                      el.currentTime = Math.min(
+                        pendingSeek.current ?? initialTime,
+                        el.duration || 0,
+                      );
                     pendingSeek.current = null;
                   }}
                   onTimeUpdate={(e) =>
                     setCurrentTime(e.currentTarget.currentTime)
                   }
-                  onPlay={() => {
+                  onPlay={(e) => {
+                    if (!canPlay) {
+                      e.currentTarget.pause();
+                      return;
+                    }
                     // Only one preview should produce audio at a time.
                     document
                       .querySelector<HTMLVideoElement>(".clip-ready video")
@@ -432,13 +454,40 @@ export default function VideoDetail() {
                   )}
                 </div>
               )}
+              {processing && (
+                <div className="player-processing-overlay" role="status">
+                  <Loader2
+                    size={24}
+                    className="animate-spin"
+                    aria-hidden="true"
+                  />
+                  <h2>Preparing your video</h2>
+                  <p>
+                    Processing frames and transcript. Playback will unlock when
+                    ready.
+                  </p>
+                  <div
+                    className="player-processing-progress"
+                    role="progressbar"
+                    aria-label="Video processing"
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={progress}
+                  >
+                    <span style={{ width: `${progress}%` }} />
+                  </div>
+                  <span className="player-processing-percent">
+                    {progress}% complete
+                  </span>
+                </div>
+              )}
             </div>
             <div className="player-transport">
               <div className="transport-playback">
                 <button
                   className="icon-button"
                   aria-label="Back 5 seconds"
-                  disabled={!video?.video_url || mediaError}
+                  disabled={!canPlay}
                   onClick={() => seekTo(currentTime - 5)}
                 >
                   <SkipBack size={14} />
@@ -446,7 +495,7 @@ export default function VideoDetail() {
                 <button
                   className="play-button"
                   aria-label={playing ? "Pause video" : "Play video"}
-                  disabled={!video?.video_url || mediaError}
+                  disabled={!canPlay}
                   onClick={togglePlayback}
                 >
                   {playing ? (
@@ -458,7 +507,7 @@ export default function VideoDetail() {
                 <button
                   className="icon-button"
                   aria-label="Forward 5 seconds"
-                  disabled={!video?.video_url || mediaError}
+                  disabled={!canPlay}
                   onClick={() => seekTo(currentTime + 5)}
                 >
                   <SkipForward size={14} />
@@ -472,6 +521,7 @@ export default function VideoDetail() {
                 <select
                   className="speed-select"
                   aria-label="Playback speed"
+                  disabled={!canPlay}
                   value={speed}
                   onChange={(e) => {
                     const rate = Number(e.target.value);
@@ -488,6 +538,7 @@ export default function VideoDetail() {
                 <button
                   className="icon-button"
                   aria-label={muted ? "Unmute video" : "Mute video"}
+                  disabled={!canPlay}
                   onClick={() => {
                     if (videoRef.current) {
                       videoRef.current.muted = !muted;
@@ -500,6 +551,7 @@ export default function VideoDetail() {
                 <button
                   className="icon-button"
                   aria-label="Full screen"
+                  disabled={!canPlay}
                   onClick={() =>
                     playerRef.current
                       ?.requestFullscreen?.()
@@ -515,22 +567,9 @@ export default function VideoDetail() {
               </div>
             </div>
           </div>
-          {!ready && video && (
-            <div
-              className={cn(
-                "editor-status",
-                video.status === "failed" && "text-destructive",
-              )}
-              role="status"
-            >
-              {video.status === "failed" ? (
-                "Processing couldn’t finish. Your original video is still available."
-              ) : (
-                <>
-                  <Loader2 size={13} className="animate-spin" />
-                  Preparing frames and transcript · {video.progress ?? 0}%
-                </>
-              )}
+          {video?.status === "failed" && (
+            <div className="editor-status text-destructive" role="status">
+              Processing couldn’t finish. Your original video is still available.
             </div>
           )}
           <section className="timeline-panel" aria-label="Timeline">
@@ -558,7 +597,7 @@ export default function VideoDetail() {
               max={fullDuration || 1}
               step="0.05"
               value={currentTime}
-              disabled={!fullDuration || mediaError}
+              disabled={!fullDuration || !canPlay}
               onChange={(e) => seekTo(Number(e.target.value))}
               style={{
                 background: `linear-gradient(to right, hsl(var(--primary)) ${fullDuration ? (currentTime / fullDuration) * 100 : 0}%, hsl(var(--border)) 0%)`,
@@ -593,6 +632,7 @@ export default function VideoDetail() {
                         "active",
                     )}
                     aria-label={`Jump to ${formatTimestamp(f.timestamp_seconds)}`}
+                    disabled={!canPlay}
                     onClick={() => seekTo(f.timestamp_seconds)}
                   >
                     <MediaThumbnail src={f.thumbnail_url || f.frame_url} />
@@ -611,9 +651,11 @@ export default function VideoDetail() {
             )}
             <div className="timeline-footer">
               <span>
-                {tab === "clips"
-                  ? "Drag the handles to set your in and out points"
-                  : "Click a frame to explore that moment"}
+                {processing
+                  ? "The timeline will unlock when processing is complete"
+                  : tab === "clips"
+                    ? "Drag the handles to set your in and out points"
+                    : "Click a frame to explore that moment"}
               </span>
               {(frameData?.pagination.total_pages ?? 0) > 1 ? (
                 <div className="flex gap-2 items-center">
@@ -639,11 +681,11 @@ export default function VideoDetail() {
                     <ChevronRight size={13} />
                   </button>
                 </div>
-              ) : (
+              ) : canPlay ? (
                 <span>
                   <kbd>Space</kbd> Play / pause
                 </span>
-              )}
+              ) : null}
             </div>
           </section>
           <div className="video-file-info">
