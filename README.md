@@ -11,6 +11,12 @@ PostgreSQL with pgvector, and Azure Blob Storage (Azurite locally). Follow
 [DEPLOY.md](DEPLOY.md) for current setup and workstation ports. The mobile-era
 architecture and setup below describe the previous client and infrastructure.
 
+The web workspace includes a paginated media library with grid/list views and status
+filters, visual search, video import, and a player with frame navigation, playback
+controls, and clickable transcript segments. Dark and light themes share the same
+layout, with a keyboard-accessible navigation drawer on smaller screens. Use
+Cmd/Ctrl+K for search and Space/arrow keys for playback in the video workspace.
+
 Local validation covers Google sign-in, session persistence, direct uploads,
 Azure transcription and visual search, video playback, and the backend test suite.
 Payments are disabled by default with `PAYMENTS_ENABLED=false`; billing controls

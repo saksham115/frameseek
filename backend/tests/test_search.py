@@ -29,6 +29,19 @@ def _make_mock_result(video_id: str | None = None, score: float = 0.85):
 # ── Search ──────────────────────────────────────────────────────────────────
 
 class TestSearch:
+    async def test_search_uses_current_title_after_rename(self, client, db_session, test_user):
+        video = await create_video(db_session, test_user["user_id"], title="Original title")
+        result = _make_mock_result(video_id=str(video.video_id))
+        result.payload["video_title"] = "Original title"
+        client.mock_vector_db.search.return_value = [result]
+        renamed = await client.patch(
+            f"/api/v1/videos/{video.video_id}", json={"title": "Updated title"}, headers=test_user["headers"],
+        )
+        assert renamed.status_code == 200
+        response = await client.post(URL, json={"query": "blue screen"}, headers=test_user["headers"])
+        assert response.status_code == 200
+        assert response.json()["data"]["results"][0]["video_title"] == "Updated title"
+
     async def test_unavailable_embeddings_returns_503_without_charging_quota(self, client, db_session, test_user):
         from app.services.embedding_service import EmbeddingUnavailableError
 

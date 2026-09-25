@@ -7,7 +7,12 @@ export interface User {
   storage_limit_bytes: number;
 }
 
-export type VideoStatus = "uploaded" | "queued" | "processing" | "completed" | "failed";
+export type VideoStatus =
+  | "uploaded"
+  | "queued"
+  | "processing"
+  | "completed"
+  | "failed";
 
 export interface Video {
   id: string;
@@ -18,6 +23,13 @@ export interface Video {
   video_url: string | null;
   created_at: string;
   progress?: number;
+  width?: number | null;
+  height?: number | null;
+  fps?: number | null;
+  file_size_bytes?: number;
+  frame_count?: number;
+  has_transcript?: boolean;
+  transcript_status?: string;
 }
 
 export interface SearchMatch {
@@ -67,6 +79,13 @@ interface RawVideo {
   thumbnail_url: string | null;
   video_url: string | null;
   created_at: string;
+  width?: number | null;
+  height?: number | null;
+  fps?: number | null;
+  file_size_bytes?: number;
+  frame_count?: number;
+  has_transcript?: boolean;
+  transcript_status?: string;
 }
 
 const STATUS_MAP: Record<string, VideoStatus> = {
@@ -84,10 +103,18 @@ export function mapVideo(v: RawVideo): Video {
     id: v.video_id,
     title: v.title,
     status: STATUS_MAP[v.status] ?? "uploaded",
-    duration_seconds: v.duration_seconds != null ? Number(v.duration_seconds) : null,
+    duration_seconds:
+      v.duration_seconds != null ? Number(v.duration_seconds) : null,
     thumbnail_url: v.thumbnail_url,
     video_url: v.video_url,
     created_at: v.created_at,
     progress: v.processing_progress ?? 0,
+    width: v.width,
+    height: v.height,
+    fps: v.fps != null ? Number(v.fps) : null,
+    file_size_bytes: v.file_size_bytes,
+    frame_count: v.frame_count,
+    has_transcript: v.has_transcript,
+    transcript_status: v.transcript_status,
   };
 }

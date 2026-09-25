@@ -235,7 +235,14 @@ async def list_frames(
     await service.get_video(video_id, user.user_id)
 
     frames, total = await service.list_frames(video_id, page, limit)
+    responses = []
+    for frame in frames:
+        response = FrameResponse.model_validate(frame)
+        response.frame_url = resolve_storage_url(frame.frame_path, frame.gcs_path)
+        thumbnail_blob = frame.gcs_path.replace("/frame_", "/thumb_") if frame.gcs_path else None
+        response.thumbnail_url = resolve_storage_url(frame.thumbnail_path, thumbnail_blob)
+        responses.append(response)
     return ApiResponse(data=FrameListResponse(
-        frames=[FrameResponse.model_validate(f) for f in frames],
+        frames=responses,
         pagination=Pagination(page=page, limit=limit, total=total, total_pages=math.ceil(total / limit) if limit else 0),
     ))

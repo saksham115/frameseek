@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.search_history import SearchHistory
 from app.models.user import User
+from app.models.video import Video
 from app.repositories.vector_db import vector_db
 from app.schemas.search import SearchQuota, SearchRequest, SearchResponse, SearchResultItem
 from app.services.embedding_service import EmbeddingService, EmbeddingUnavailableError
@@ -50,10 +51,21 @@ class SearchService:
         )
 
         # Enrich results with video titles and short-lived signed URLs (Blob SAS only).
+        # Indexed payloads retain the original title when a video is renamed.
+        titles = {}
+        if raw_results:
+            rows = await self.db.execute(
+                select(Video.video_id, Video.title).where(
+                    Video.user_id == user_id,
+                    Video.deleted_at.is_(None),
+                    Video.video_id.in_([UUID(r.video_id) for r in raw_results]),
+                )
+            )
+            titles = {str(video_id): title for video_id, title in rows}
         gcs_enabled = GCSClient.is_enabled()
         results: list[SearchResultItem] = []
         for r in raw_results:
-            video_title = r.payload.get("video_title", "Unknown")
+            video_title = titles.get(r.video_id, r.payload.get("video_title", "Unknown"))
             frame_id = r.payload.get("frame_id") or r.frame_id
 
             gcs_frame = r.payload.get("gcs_frame_path")

@@ -1,91 +1,199 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
-import { Search as SearchIcon, ArrowRight } from "lucide-react";
+import {
+  ArrowRight,
+  ArrowUpRight,
+  Focus,
+  Image,
+  ScanLine,
+  Search as SearchIcon,
+  Sparkles,
+} from "lucide-react";
 import { search } from "@/api/search";
-import type { SearchMatch } from "@/api/types";
+import { Button } from "@/components/ui/button";
+import { MediaThumbnail, PageHeader } from "@/components/MediaUI";
 import { formatTimestamp } from "@/lib/format";
 
-const SUGGESTIONS = ["person holding a red cup", "sunset on the beach", "someone laughing", "a whiteboard with text"];
-
-const Search = () => {
+const SUGGESTIONS = [
+  "A person by the ocean",
+  "Golden hour light",
+  "Someone laughing",
+  "A city at night",
+];
+export default function Search() {
   const [query, setQuery] = useState("");
   const navigate = useNavigate();
-
-  const { mutate, data: matches, isPending, isError } = useMutation<SearchMatch[], unknown, string>({
-    mutationFn: (q) => search(q),
-  });
-
+  const {
+    mutate,
+    data: matches,
+    variables,
+    isPending,
+    isError,
+    isIdle,
+  } = useMutation({ mutationFn: (q: string) => search(q) });
   const run = (q: string) => {
-    const trimmed = q.trim();
-    if (!trimmed) return;
-    setQuery(trimmed);
-    mutate(trimmed);
+    if (!q.trim() || isPending) return;
+    setQuery(q.trim());
+    mutate(q.trim());
   };
-
   return (
-    <div className="max-w-3xl mx-auto">
-      <h1 className="text-3xl font-bold tracking-tight text-center mb-2">Search your videos</h1>
-      <p className="text-muted-foreground text-center mb-8">Describe the moment — we’ll find the exact frame.</p>
-
-      <div className="search-bar">
-        <SearchIcon className="h-5 w-5 shrink-0" style={{ color: "var(--cream-mid)" }} />
+    <div className="search-page">
+      <PageHeader
+        eyebrow="SEE YOUR FOOTAGE DIFFERENTLY"
+        title="Find the moment."
+        description="Describe what you remember. We’ll find where it happens."
+        action={
+          <span className="status-badge status-completed">
+            <Sparkles size={11} /> Visual search
+          </span>
+        }
+      />
+      <form
+        className="search-field"
+        onSubmit={(e) => {
+          e.preventDefault();
+          run(query);
+        }}
+      >
+        <SearchIcon size={19} />
         <input
           autoFocus
+          aria-label="Describe a moment"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && run(query)}
-          placeholder="What are you looking for?"
+          placeholder="A scene, a color, a feeling. What are you looking for?"
+          maxLength={500}
         />
-        <button className="search-btn" onClick={() => run(query)}>
-          Search <ArrowRight className="h-4 w-4" />
-        </button>
-      </div>
-
-      <div className="flex flex-wrap gap-2 justify-center mt-5">
-        {SUGGESTIONS.map((s, i) => (
+        <Button
+          className="studio-button"
+          disabled={isPending || !query.trim()}
+          type="submit"
+        >
+          {isPending ? "Searching…" : "Search"}
+          <ArrowRight />
+        </Button>
+      </form>
+      <div className="search-suggestions">
+        <span>A LITTLE INSPIRATION</span>
+        {SUGGESTIONS.map((s) => (
           <button
             key={s}
-            className="hero-tag"
-            style={{ animationDelay: `${i * 60}ms` }}
-            onClick={() => run(s)}
+            className="suggestion"
+            disabled={isPending}
+            onClick={() => setQuery(s)}
           >
             {s}
+            <ArrowUpRight size={10} />
           </button>
         ))}
       </div>
-
-      <div className="mt-10">
-        {isError && <p role="alert" className="text-center text-destructive">Search is temporarily unavailable. Please try again later.</p>}
-        {isPending && <p className="text-center text-muted-foreground font-mono text-sm animate-pulse">Searching…</p>}
-        {matches && matches.length === 0 && (
-          <p className="text-center text-muted-foreground">No matches. Try describing it differently.</p>
-        )}
-        {matches && matches.length > 0 && (
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-            {matches.map((m, i) => (
-              <button
-                key={`${m.video_id}-${m.timestamp_seconds}-${i}`}
-                onClick={() => navigate(`/videos/${m.video_id}?t=${Math.floor(m.timestamp_seconds)}`)}
-                className="group text-left rounded-xl border border-border bg-card overflow-hidden transition-all hover:border-primary"
-              >
-                <div className="aspect-video bg-secondary relative">
-                  <img src={m.frame_url} alt="" className="h-full w-full object-cover" />
-                  <span className="absolute bottom-2 right-2 rounded bg-black/70 px-1.5 py-0.5 font-mono text-xs text-white">
-                    {formatTimestamp(m.timestamp_seconds)}
-                  </span>
-                </div>
-                <div className="p-3">
-                  <p className="truncate text-sm font-medium">{m.video_title}</p>
-                  <p className="text-xs text-muted-foreground">{Math.round(m.score * 100)}% match</p>
-                </div>
-              </button>
+      {isError && (
+        <div className="error-state" role="alert">
+          Search is temporarily unavailable. Please try again.
+        </div>
+      )}
+      {isPending && (
+        <div role="status">
+          <div className="section-caption">
+            <span>Finding the frames that matter…</span>
+            <ScanLine size={16} className="animate-pulse" />
+          </div>
+          <div className="media-grid">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="skeleton aspect-video" />
             ))}
           </div>
-        )}
-      </div>
+        </div>
+      )}
+      {isIdle && (
+        <>
+          <div className="search-intro">
+            <div className="search-orbit" aria-hidden="true">
+              <div />
+              <div />
+              <div>
+                <Focus size={29} strokeWidth={1} />
+              </div>
+            </div>
+            <h2>There’s a frame for that.</h2>
+            <p>
+              Search across your processed videos with natural language. No
+              tags, filenames, or perfect memory required.
+            </p>
+          </div>
+          <div className="search-footer">
+            <div>
+              <Image size={18} strokeWidth={1.5} />
+              <h3>Think visually</h3>
+              <p>Describe a scene, object, color, or action.</p>
+            </div>
+            <div>
+              <ScanLine size={18} strokeWidth={1.5} />
+              <h3>Find the right frame</h3>
+              <p>Your most relevant moments appear first.</p>
+            </div>
+            <div>
+              <ArrowUpRight size={18} strokeWidth={1.5} />
+              <h3>Pick up from there</h3>
+              <p>Open a result to jump straight into the video.</p>
+            </div>
+          </div>
+        </>
+      )}
+      {!isPending && !isError && matches && (
+        <>
+          <div className="search-results-heading">
+            <strong>
+              {matches.length
+                ? `Results for “${variables}”`
+                : "No matching moments yet"}
+            </strong>
+            <span>{matches.length} frames · Best matches first</span>
+          </div>
+          {matches.length ? (
+            <div className="media-grid">
+              {matches.map((m, i) => (
+                <button
+                  className="media-card result-card"
+                  key={`${m.video_id}-${m.timestamp_seconds}-${i}`}
+                  onClick={() =>
+                    navigate(`/videos/${m.video_id}?t=${m.timestamp_seconds}`)
+                  }
+                >
+                  <div className="media-card-preview">
+                    <MediaThumbnail src={m.frame_url} />
+                    <div className="preview-shade" />
+                    <span className="timecode">
+                      {formatTimestamp(m.timestamp_seconds)}
+                    </span>
+                  </div>
+                  <div className="media-card-info">
+                    <span className="media-card-title">{m.video_title}</span>
+                    <div className="media-card-meta">
+                      <span>
+                        Visual similarity {Math.round(m.score * 100)}%
+                      </span>
+                      <ArrowUpRight size={13} />
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="empty-state">
+              <div className="empty-icon">
+                <SearchIcon size={22} />
+              </div>
+              <h2>Try another way of seeing it.</h2>
+              <p>
+                Use a simple description, or check that your videos have
+                finished processing.
+              </p>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
-};
-
-export default Search;
+}

@@ -3,7 +3,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { useAuth } from "@/store/auth";
 import { setAuthFailureHandler } from "@/api/client";
 import AppShell from "@/components/AppShell";
-import AmbientBackground from "@/components/AmbientBackground";
+import LogoIcon from "@/components/LogoIcon";
 import Login from "@/pages/Login";
 import Library from "@/pages/Library";
 import Search from "@/pages/Search";
@@ -24,8 +24,12 @@ const App = () => {
   if (status === "loading") {
     return (
       <div className="min-h-screen grid place-items-center text-muted-foreground">
-        <AmbientBackground />
-        <span className="font-mono text-sm animate-pulse">Loading…</span>
+        <div className="flex flex-col items-center gap-5">
+          <LogoIcon size={44} />
+          <span className="font-mono text-xs text-muted-foreground animate-pulse">
+            Opening your workspace…
+          </span>
+        </div>
       </div>
     );
   }

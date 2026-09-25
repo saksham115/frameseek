@@ -303,6 +303,22 @@ class TestProcessVideo:
 # ── Frames ──────────────────────────────────────────────────────────────────
 
 class TestListFrames:
+    async def test_blob_frames_work_after_local_files_are_removed(self, client, db_session, test_user, test_video):
+        frame = await create_frame(db_session, test_video.video_id, test_user["user_id"])
+        frame.frame_path = None
+        frame.thumbnail_path = None
+        frame.gcs_path = f"frames/{test_video.video_id}/frame_000000.jpg"
+        await db_session.commit()
+
+        resp = await client.get(f"{URL}/{test_video.video_id}/frames", headers=test_user["headers"])
+        assert resp.status_code == 200
+        item = resp.json()["data"]["frames"][0]
+        assert item["frame_path"] is None
+        assert item["frame_url"] == "https://storage.test/read"
+        assert item["thumbnail_url"] == "https://storage.test/read"
+        client.mock_blob.generate_signed_url.assert_any_call(frame.gcs_path)
+        client.mock_blob.generate_signed_url.assert_any_call(f"frames/{test_video.video_id}/thumb_000000.jpg")
+
     async def test_frames_success(self, client, db_session, test_user, test_video):
         for i in range(3):
             await create_frame(db_session, test_video.video_id, test_user["user_id"], frame_index=i, timestamp_seconds=i * 2.0)

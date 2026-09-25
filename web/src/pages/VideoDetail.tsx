@@ -1,45 +1,152 @@
 import { useEffect, useRef, useState } from "react";
-import { useParams, useSearchParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
-import { Search as SearchIcon } from "lucide-react";
-import { getVideo } from "@/api/videos";
+import { Link, useParams, useSearchParams } from "react-router-dom";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  ArrowLeft,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Copy,
+  FileText,
+  Film,
+  Focus,
+  Loader2,
+  Maximize,
+  Pause,
+  Pencil,
+  Play,
+  Search as SearchIcon,
+  SkipBack,
+  SkipForward,
+  Volume2,
+  VolumeX,
+  X,
+} from "lucide-react";
+import { toast } from "sonner";
+import { getFrames, getTranscript, getVideo, renameVideo } from "@/api/videos";
 import { search } from "@/api/search";
 import type { SearchMatch } from "@/api/types";
-import { Badge } from "@/components/ui/badge";
-import { formatTimestamp } from "@/lib/format";
+import { Button } from "@/components/ui/button";
+import { MediaThumbnail, StatusBadge } from "@/components/MediaUI";
+import { formatBytes, formatTimestamp } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
-const VideoDetail = () => {
+export default function VideoDetail() {
   const { id = "" } = useParams();
   const [params] = useSearchParams();
   const videoRef = useRef<HTMLVideoElement>(null);
+  const playerRef = useRef<HTMLDivElement>(null);
+  const pendingSeek = useRef<number | null>(null);
   const [query, setQuery] = useState("");
   const [matches, setMatches] = useState<SearchMatch[] | null>(null);
   const [searchError, setSearchError] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
-
-  const { data: video } = useQuery({
+  const [tab, setTab] = useState<"search" | "transcript">("search");
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [playing, setPlaying] = useState(false);
+  const [muted, setMuted] = useState(false);
+  const [speed, setSpeed] = useState(1);
+  const [mediaError, setMediaError] = useState(false);
+  const [framePage, setFramePage] = useState(1);
+  const [editing, setEditing] = useState(false);
+  const [title, setTitle] = useState("");
+  const [saving, setSaving] = useState(false);
+  const qc = useQueryClient();
+  const {
+    data: video,
+    isError,
+    refetch,
+  } = useQuery({
     queryKey: ["video", id],
     queryFn: () => getVideo(id),
     refetchInterval: (q) =>
-      q.state.data?.status === "processing" || q.state.data?.status === "queued" ? 4000 : false,
+      ["processing", "queued", "uploaded"].includes(q.state.data?.status ?? "")
+        ? 4000
+        : false,
   });
+  const ready = video?.status === "completed";
+  const {
+    data: frameData,
+    isLoading: framesLoading,
+    isError: framesError,
+    refetch: refetchFrames,
+  } = useQuery({
+    queryKey: ["frames", id, framePage],
+    queryFn: () => getFrames(id, framePage),
+    enabled: ready,
+  });
+  const {
+    data: transcript,
+    isLoading: transcriptLoading,
+    isError: transcriptError,
+    refetch: refetchTranscript,
+  } = useQuery({
+    queryKey: ["transcript", id],
+    queryFn: () => getTranscript(id),
+    enabled: !!video?.has_transcript,
+  });
+  const frames = frameData?.frames ?? [];
+  const fullDuration = duration || video?.duration_seconds || 0;
+  const initialTime = Math.max(0, Number(params.get("t")) || 0);
 
-  // Seek to the timestamp passed from a search result (?t=seconds).
-  const seekTo = (seconds: number) => {
+  const seekTo = (seconds: number, play = false) => {
     const el = videoRef.current;
     if (!el) return;
-    el.currentTime = seconds;
-    el.play().catch(() => undefined);
+    const target = Math.max(
+      0,
+      Math.min(
+        seconds,
+        Number.isFinite(el.duration) ? el.duration : fullDuration || seconds,
+      ),
+    );
+    if (el.readyState === 0) pendingSeek.current = target;
+    else el.currentTime = target;
+    setCurrentTime(target);
+    if (play) el.play().catch(() => undefined);
   };
-
+  const togglePlayback = () => {
+    const el = videoRef.current;
+    if (!el) return;
+    if (el.paused)
+      el.play().catch(() =>
+        toast.error("We couldn’t play this video. Try loading it again."),
+      );
+    else el.pause();
+  };
   useEffect(() => {
-    const t = Number(params.get("t"));
-    if (video && !Number.isNaN(t) && t > 0) seekTo(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [video, params]);
-
-  const runScopedSearch = async () => {
-    if (!query.trim() || isSearching) return;
+    seekTo(initialTime);
+  }, [initialTime, id]);
+  useEffect(() => {
+    const keydown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (
+        e.defaultPrevented ||
+        e.ctrlKey ||
+        e.metaKey ||
+        target.closest(
+          "input, textarea, button, select, [contenteditable], [role=dialog]",
+        )
+      )
+        return;
+      if (e.code === "Space") {
+        e.preventDefault();
+        togglePlayback();
+      }
+      if (e.code === "ArrowLeft") {
+        e.preventDefault();
+        seekTo((videoRef.current?.currentTime || 0) - 5);
+      }
+      if (e.code === "ArrowRight") {
+        e.preventDefault();
+        seekTo((videoRef.current?.currentTime || 0) + 5);
+      }
+    };
+    window.addEventListener("keydown", keydown);
+    return () => window.removeEventListener("keydown", keydown);
+  }, [fullDuration]);
+  const runSearch = async () => {
+    if (!query.trim() || isSearching || !ready) return;
     setSearchError(false);
     setIsSearching(true);
     setMatches(null);
@@ -51,66 +158,590 @@ const VideoDetail = () => {
       setIsSearching(false);
     }
   };
-
+  const saveTitle = async () => {
+    if (!title.trim() || saving) return;
+    setSaving(true);
+    try {
+      await renameVideo(id, title.trim());
+      await qc.invalidateQueries({ queryKey: ["video", id] });
+      await qc.invalidateQueries({ queryKey: ["videos"] });
+      setEditing(false);
+    } catch {
+      toast.error("Couldn’t rename this video.");
+    } finally {
+      setSaving(false);
+    }
+  };
+  if (isError)
+    return (
+      <div className="p-8">
+        <div className="error-state" role="alert">
+          This video couldn’t be loaded.{" "}
+          <button className="underline" onClick={() => refetch()}>
+            Try again
+          </button>
+        </div>
+        <Link to="/" className="inline-block mt-5 text-primary">
+          Back to library
+        </Link>
+      </div>
+    );
   return (
-    <div className="max-w-4xl mx-auto">
-      <div className="flex items-center justify-between gap-4 mb-4">
-        <h1 className="text-2xl font-bold tracking-tight truncate">{video?.title ?? "Loading…"}</h1>
-        {video && <Badge variant="outline">{video.status}</Badge>}
-      </div>
-
-      <div className="rounded-2xl overflow-hidden border border-border bg-black aspect-video">
-        {video?.video_url ? (
-          <video ref={videoRef} controls className="h-full w-full" poster={video.thumbnail_url ?? undefined}>
-            <source src={video.video_url} />
-          </video>
-        ) : (
-          <div className="h-full grid place-items-center text-muted-foreground font-mono text-sm">
-            {video?.status === "failed" ? "Processing failed" : "Processing… frames and transcript are being generated"}
+    <div className="editor-workspace">
+      <div className="editor-heading">
+        <div className="flex items-center gap-3 min-w-0">
+          <Link to="/" className="icon-button" aria-label="Back to library">
+            <ArrowLeft size={17} />
+          </Link>
+          <div className="min-w-0">
+            {editing ? (
+              <form
+                className="rename-form"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  saveTitle();
+                }}
+              >
+                <input
+                  autoFocus
+                  aria-label="Video title"
+                  maxLength={500}
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                />
+                <button
+                  className="icon-button"
+                  aria-label="Save title"
+                  disabled={saving || !title.trim()}
+                >
+                  <Check size={15} />
+                </button>
+                <button
+                  type="button"
+                  className="icon-button"
+                  aria-label="Cancel rename"
+                  onClick={() => setEditing(false)}
+                >
+                  <X size={15} />
+                </button>
+              </form>
+            ) : (
+              <div className="flex items-center gap-2 min-w-0">
+                <h1 className="truncate">
+                  {video?.title ?? "Opening workspace…"}
+                </h1>
+                {video && (
+                  <button
+                    className="icon-button"
+                    aria-label="Rename video"
+                    onClick={() => {
+                      setTitle(video.title);
+                      setEditing(true);
+                    }}
+                  >
+                    <Pencil size={12} />
+                  </button>
+                )}
+              </div>
+            )}
+            <p>
+              VIDEO WORKSPACE <span> / </span> ORIGINAL MEDIA
+            </p>
           </div>
-        )}
+        </div>
+        {video && <StatusBadge status={video.status} />}
       </div>
-
-      {video?.status === "failed" && (
-        <p role="status" className="mt-3 text-sm text-destructive">Your video was uploaded, but processing failed. Search results are not available for it yet.</p>
-      )}
-      {(video?.status === "processing" || video?.status === "queued") && (
-        <p role="status" className="mt-3 text-sm text-muted-foreground">Processing your video. You can watch it while we prepare search results.</p>
-      )}
-
-      <div className="search-bar mt-6">
-        <SearchIcon className="h-5 w-5 shrink-0" style={{ color: "var(--cream-mid)" }} />
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && runScopedSearch()}
-          placeholder="Search within this video…"
-        />
-        <button className="search-btn" onClick={runScopedSearch} disabled={isSearching}>{isSearching ? "Searching…" : "Search"}</button>
-      </div>
-
-      {searchError && <p role="alert" className="mt-4 text-destructive">Search is temporarily unavailable. Please try again later.</p>}
-
-      {matches && (
-        <div className="mt-6 grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {matches.map((m, i) => (
-            <button
-              key={i}
-              onClick={() => seekTo(m.timestamp_seconds)}
-              className="group rounded-lg overflow-hidden border border-border hover:border-primary transition-colors"
-            >
-              <div className="aspect-video relative">
-                <img src={m.frame_url} alt="" className="h-full w-full object-cover" />
-                <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1 py-0.5 font-mono text-[10px] text-white">
-                  {formatTimestamp(m.timestamp_seconds)}
+      <div className="editor-grid">
+        <section
+          className="editor-main-panel"
+          aria-label="Video preview and timeline"
+        >
+          <div className="panel-caption">
+            <span>
+              <span className="preview-dot" /> PREVIEW
+            </span>
+            <span>
+              {video?.width && video?.height
+                ? `${video.width} × ${video.height}`
+                : "Original resolution"}
+              {video?.fps ? ` · ${Math.round(video.fps)} FPS` : ""}
+            </span>
+          </div>
+          <div className="player-window" ref={playerRef}>
+            <div className="player-stage">
+              {video?.video_url && !mediaError ? (
+                <video
+                  ref={videoRef}
+                  key={id}
+                  src={video.video_url}
+                  poster={
+                    ready ? (video.thumbnail_url ?? undefined) : undefined
+                  }
+                  playsInline
+                  preload="metadata"
+                  onClick={togglePlayback}
+                  aria-label={`Preview of ${video.title}`}
+                  onLoadedMetadata={(e) => {
+                    const el = e.currentTarget;
+                    setDuration(el.duration);
+                    el.currentTime = Math.min(
+                      pendingSeek.current ?? initialTime,
+                      el.duration || 0,
+                    );
+                    pendingSeek.current = null;
+                  }}
+                  onTimeUpdate={(e) =>
+                    setCurrentTime(e.currentTarget.currentTime)
+                  }
+                  onPlay={() => setPlaying(true)}
+                  onPause={() => setPlaying(false)}
+                  onEnded={() => setPlaying(false)}
+                  onError={() => setMediaError(true)}
+                />
+              ) : (
+                <div className="player-message">
+                  <Film size={28} strokeWidth={1} />
+                  <p>
+                    {mediaError
+                      ? "This preview couldn’t be loaded."
+                      : "Preparing your preview…"}
+                  </p>
+                  {mediaError && (
+                    <button
+                      onClick={() => {
+                        setMediaError(false);
+                        refetch();
+                      }}
+                      className="underline"
+                    >
+                      Try again
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="player-transport">
+              <div className="transport-playback">
+                <button
+                  className="icon-button"
+                  aria-label="Back 5 seconds"
+                  disabled={!video?.video_url || mediaError}
+                  onClick={() => seekTo(currentTime - 5)}
+                >
+                  <SkipBack size={14} />
+                </button>
+                <button
+                  className="play-button"
+                  aria-label={playing ? "Pause video" : "Play video"}
+                  disabled={!video?.video_url || mediaError}
+                  onClick={togglePlayback}
+                >
+                  {playing ? (
+                    <Pause size={15} fill="currentColor" />
+                  ) : (
+                    <Play size={15} fill="currentColor" />
+                  )}
+                </button>
+                <button
+                  className="icon-button"
+                  aria-label="Forward 5 seconds"
+                  disabled={!video?.video_url || mediaError}
+                  onClick={() => seekTo(currentTime + 5)}
+                >
+                  <SkipForward size={14} />
+                </button>
+                <span className="transport-time">
+                  <strong>{formatTimestamp(currentTime)}</strong>
+                  <span> / {formatTimestamp(fullDuration)}</span>
                 </span>
               </div>
+              <div className="flex items-center gap-2">
+                <select
+                  className="speed-select"
+                  aria-label="Playback speed"
+                  value={speed}
+                  onChange={(e) => {
+                    const rate = Number(e.target.value);
+                    setSpeed(rate);
+                    if (videoRef.current) videoRef.current.playbackRate = rate;
+                  }}
+                >
+                  {[0.5, 1, 1.5, 2].map((s) => (
+                    <option key={s} value={s}>
+                      {s}×
+                    </option>
+                  ))}
+                </select>
+                <button
+                  className="icon-button"
+                  aria-label={muted ? "Unmute video" : "Mute video"}
+                  onClick={() => {
+                    if (videoRef.current) {
+                      videoRef.current.muted = !muted;
+                      setMuted(!muted);
+                    }
+                  }}
+                >
+                  {muted ? <VolumeX size={15} /> : <Volume2 size={15} />}
+                </button>
+                <button
+                  className="icon-button"
+                  aria-label="Full screen"
+                  onClick={() =>
+                    playerRef.current
+                      ?.requestFullscreen?.()
+                      .catch(() =>
+                        toast.error(
+                          "Full screen isn’t available in this browser.",
+                        ),
+                      )
+                  }
+                >
+                  <Maximize size={15} />
+                </button>
+              </div>
+            </div>
+          </div>
+          {!ready && video && (
+            <div
+              className={cn(
+                "editor-status",
+                video.status === "failed" && "text-destructive",
+              )}
+              role="status"
+            >
+              {video.status === "failed" ? (
+                "Processing couldn’t finish. Your original video is still available."
+              ) : (
+                <>
+                  <Loader2 size={13} className="animate-spin" />
+                  Preparing frames and transcript · {video.progress ?? 0}%
+                </>
+              )}
+            </div>
+          )}
+          <section className="timeline-panel" aria-label="Timeline">
+            <div className="panel-caption">
+              <span>
+                <Film size={12} /> FRAME NAVIGATOR
+              </span>
+              <span>{video?.frame_count ?? 0} indexed frames</span>
+            </div>
+            <div className="timeline-ruler">
+              {[0, 0.2, 0.4, 0.6, 0.8, 1].map((f) => (
+                <span key={f}>{formatTimestamp(fullDuration * f)}</span>
+              ))}
+            </div>
+            <input
+              className="timeline-scrubber"
+              aria-label="Video position"
+              aria-valuetext={formatTimestamp(currentTime)}
+              type="range"
+              min="0"
+              max={fullDuration || 1}
+              step="0.05"
+              value={currentTime}
+              disabled={!fullDuration || mediaError}
+              onChange={(e) => seekTo(Number(e.target.value))}
+              style={{
+                background: `linear-gradient(to right, hsl(var(--primary)) ${fullDuration ? (currentTime / fullDuration) * 100 : 0}%, hsl(var(--border)) 0%)`,
+              }}
+            />
+            {framesError ? (
+              <p className="editor-status" role="alert">
+                Frames couldn’t be loaded.{" "}
+                <button className="underline" onClick={() => refetchFrames()}>
+                  Retry
+                </button>
+              </p>
+            ) : frames.length ? (
+              <div className="filmstrip">
+                {frames.map((f, i) => (
+                  <button
+                    key={f.frame_id}
+                    className={cn(
+                      "filmstrip-frame",
+                      currentTime >= f.timestamp_seconds &&
+                        currentTime <
+                          (frames[i + 1]?.timestamp_seconds ??
+                            fullDuration + 0.1) &&
+                        "active",
+                    )}
+                    aria-label={`Jump to ${formatTimestamp(f.timestamp_seconds)}`}
+                    onClick={() => seekTo(f.timestamp_seconds)}
+                  >
+                    <MediaThumbnail src={f.thumbnail_url || f.frame_url} />
+                    <span>{formatTimestamp(f.timestamp_seconds)}</span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="filmstrip-empty">
+                {framesLoading
+                  ? "Loading indexed frames…"
+                  : ready
+                    ? "No frames available"
+                    : "Your indexed frames will appear here"}
+              </div>
+            )}
+            <div className="timeline-footer">
+              <span>Click a frame to explore that moment</span>
+              {(frameData?.pagination.total_pages ?? 0) > 1 ? (
+                <div className="flex gap-2 items-center">
+                  <button
+                    className="icon-button"
+                    aria-label="Previous frames"
+                    disabled={framePage <= 1}
+                    onClick={() => setFramePage((p) => p - 1)}
+                  >
+                    <ChevronLeft size={13} />
+                  </button>
+                  <span>
+                    {framePage} / {frameData?.pagination.total_pages}
+                  </span>
+                  <button
+                    className="icon-button"
+                    aria-label="Next frames"
+                    disabled={
+                      framePage >= (frameData?.pagination.total_pages ?? 1)
+                    }
+                    onClick={() => setFramePage((p) => p + 1)}
+                  >
+                    <ChevronRight size={13} />
+                  </button>
+                </div>
+              ) : (
+                <span>
+                  <kbd>Space</kbd> Play / pause
+                </span>
+              )}
+            </div>
+          </section>
+          <div className="video-file-info">
+            <span>
+              <Film size={12} /> Original video
+            </span>
+            <span>
+              {formatBytes(video?.file_size_bytes ?? 0)}
+              <span className="mx-3 opacity-30">/</span>
+              {video
+                ? new Date(video.created_at).toLocaleDateString(undefined, {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                  })
+                : ""}
+            </span>
+          </div>
+        </section>
+        <aside className="editor-inspector" aria-label="Video insights">
+          <div className="inspector-tabs">
+            <button
+              onClick={() => setTab("search")}
+              className={cn(tab === "search" && "active")}
+              aria-pressed={tab === "search"}
+            >
+              <SearchIcon size={14} /> Visual search
             </button>
-          ))}
-        </div>
-      )}
+            <button
+              onClick={() => setTab("transcript")}
+              className={cn(tab === "transcript" && "active")}
+              aria-pressed={tab === "transcript"}
+            >
+              <FileText size={14} /> Transcript
+            </button>
+          </div>
+          {tab === "search" ? (
+            <div className="inspector-content">
+              <div className="inspector-intro">
+                <h2>Find something in this video</h2>
+                <p>Describe the moment you’re looking for.</p>
+              </div>
+              <form
+                className="inspector-search"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  runSearch();
+                }}
+              >
+                <input
+                  aria-label="Search within this video"
+                  placeholder="A scene, object, or action…"
+                  value={query}
+                  maxLength={500}
+                  onChange={(e) => setQuery(e.target.value)}
+                  disabled={!ready}
+                />
+                <button
+                  aria-label="Search video"
+                  disabled={!ready || isSearching || !query.trim()}
+                >
+                  {isSearching ? (
+                    <Loader2 size={15} className="animate-spin" />
+                  ) : (
+                    <SearchIcon size={15} />
+                  )}
+                </button>
+              </form>
+              {!ready && (
+                <p className="inspector-hint">
+                  Visual search becomes available when processing is complete.
+                </p>
+              )}
+              {searchError && (
+                <p role="alert" className="text-destructive text-xs mt-5">
+                  Search is temporarily unavailable. Please try again.
+                </p>
+              )}
+              {isSearching && (
+                <div
+                  className="space-y-3 mt-6"
+                  role="status"
+                  aria-label="Searching video"
+                >
+                  {[0, 1, 2].map((i) => (
+                    <div className="skeleton h-20" key={i} />
+                  ))}
+                </div>
+              )}
+              {matches ? (
+                <>
+                  <div className="inspector-results-label">
+                    {matches.length} MATCHING FRAMES
+                  </div>
+                  <div className="inspector-results">
+                    {matches.length ? (
+                      matches.map((m, i) => (
+                        <button
+                          className="inspector-result"
+                          key={i}
+                          onClick={() => seekTo(m.timestamp_seconds, true)}
+                          aria-label={`Play match at ${formatTimestamp(m.timestamp_seconds)}`}
+                        >
+                          <div className="result-thumb">
+                            <MediaThumbnail src={m.frame_url} />
+                          </div>
+                          <div>
+                            <strong>
+                              {formatTimestamp(m.timestamp_seconds)}
+                            </strong>
+                            <span>
+                              {Math.round(m.score * 100)}% visual similarity
+                            </span>
+                          </div>
+                          <Play size={12} />
+                        </button>
+                      ))
+                    ) : (
+                      <p className="inspector-hint">
+                        No matching frames. Try a simpler description.
+                      </p>
+                    )}
+                  </div>
+                </>
+              ) : (
+                !isSearching &&
+                !searchError && (
+                  <div className="inspector-empty">
+                    <div className="empty-icon">
+                      <Focus size={25} strokeWidth={1} />
+                    </div>
+                    <h3>Less scrubbing. More finding.</h3>
+                    <p>
+                      Your matching moments will appear here, ready to play.
+                    </p>
+                  </div>
+                )
+              )}
+            </div>
+          ) : (
+            <div className="inspector-content">
+              <div className="transcript-heading">
+                <div>
+                  <h2>Every word, in context.</h2>
+                  <p>
+                    {transcript?.language
+                      ? `${transcript.language} · ${transcript.segments.length} segments`
+                      : "Audio transcript"}
+                  </p>
+                </div>
+                {transcript?.segments.length ? (
+                  <button
+                    className="icon-button"
+                    aria-label="Copy transcript"
+                    onClick={() =>
+                      navigator.clipboard
+                        .writeText(
+                          transcript.segments.map((s) => s.text).join("\n"),
+                        )
+                        .then(() => toast.success("Transcript copied."))
+                        .catch(() =>
+                          toast.error("Couldn’t copy the transcript."),
+                        )
+                    }
+                  >
+                    <Copy size={14} />
+                  </button>
+                ) : null}
+              </div>
+              {transcriptLoading ? (
+                <p className="inspector-hint" role="status">
+                  Loading transcript…
+                </p>
+              ) : transcriptError ? (
+                <p className="inspector-hint" role="alert">
+                  Transcript couldn’t be loaded.{" "}
+                  <button
+                    className="underline"
+                    onClick={() => refetchTranscript()}
+                  >
+                    Retry
+                  </button>
+                </p>
+              ) : transcript?.segments.length ? (
+                <div className="transcript-list">
+                  {transcript.segments.map((s) => (
+                    <button
+                      className={cn(
+                        "transcript-segment",
+                        currentTime >= s.start_seconds &&
+                          currentTime < s.end_seconds &&
+                          "active",
+                      )}
+                      key={s.segment_id}
+                      onClick={() => seekTo(s.start_seconds, true)}
+                    >
+                      <span>{formatTimestamp(s.start_seconds)}</span>
+                      <p>{s.text}</p>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="inspector-empty">
+                  <div className="empty-icon">
+                    <FileText size={22} strokeWidth={1.2} />
+                  </div>
+                  <h3>
+                    {ready
+                      ? "No transcript available"
+                      : "Listening for the details"}
+                  </h3>
+                  <p>
+                    {ready
+                      ? "This video has no transcript to display."
+                      : "Spoken audio will appear here after processing."}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+          <div className="inspector-bottom">
+            <span className="workspace-dot" />
+            <span>Focused on this video</span>
+            <Film size={12} />
+          </div>
+        </aside>
+      </div>
     </div>
   );
-};
-
-export default VideoDetail;
+}

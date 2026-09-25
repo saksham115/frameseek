@@ -78,8 +78,10 @@ class FrameResponse(BaseModel):
     video_id: UUID
     frame_index: int
     timestamp_seconds: Decimal
-    frame_path: str
+    frame_path: str | None = None
     thumbnail_path: str | None = None
+    frame_url: str | None = None
+    thumbnail_url: str | None = None
     width: int | None = None
     height: int | None = None
     embedding_id: str | None = None
