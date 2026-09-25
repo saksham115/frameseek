@@ -19,7 +19,6 @@ backend/storage/
 htmlcov/
 
 # IDE
-.vscode/
 .idea/
 
 # OS
@@ -30,3 +29,6 @@ node_modules/
 
 # Expo
 mobile/.expo/
+temp_auto_push.bat
+temp_interactive_push.bat
+.gitignore
