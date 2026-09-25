@@ -37,7 +37,7 @@ class JobService:
         )
 
         # Update video status
-        await self.video_repo.update(video, status="queued")
+        await self.video_repo.update(video, status="queued", processing_progress=0, error_message=None)
 
         # Both inline workers and queue consumers use a separate DB connection.
         # Publish only after they can see the job and finalized upload.

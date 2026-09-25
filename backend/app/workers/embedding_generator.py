@@ -8,7 +8,9 @@ from app.workers.audio_transcriber import TranscriptChunk
 
 class EmbeddingGenerator:
     def __init__(self):
-        self.embedding_service = EmbeddingService()
+        # Background processing can wait through the free-tier quota window.
+        # Interactive search keeps the service's shorter default retry budget.
+        self.embedding_service = EmbeddingService(max_retries=5, retry_budget_seconds=180)
 
     async def generate_and_store(
         self,
