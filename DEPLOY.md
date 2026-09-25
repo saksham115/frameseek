@@ -224,11 +224,39 @@ synthetic clip, waits for the actual queue worker, checks Whisper, visual search
 signed frames and range playback, then removes its test data. A timed-out job keeps
 its own records for diagnosis. This does not replace a real Google browser login.
 
-Pushes run tests; deployment remains manual. The GitHub workflow requires an Azure
-OIDC identity and repository variables `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`,
-`AZURE_SUBSCRIPTION_ID`, `ACR_NAME`, `RESOURCE_GROUP`, `API_APP`, `WORKER_JOB`,
-`WEB_APP`, and `MIGRATION_JOB`. It waits for successful migrations before rollout.
-OIDC setup is separate from this initial CLI deployment.
+Every push to `main` now deploys through `.github/workflows/deploy.yml` after the
+backend tests, frontend tests, type check and web build pass. Pull requests and
+`codex/**` branches run checks only. Releases are serialized without interrupting
+an active migration; outdated commits waiting to deploy are skipped.
+
+The workflow builds API/worker and web images in ACR tagged with the full commit
+SHA, runs migrations inside the private Azure environment, updates the API, worker
+and web, then checks revision readiness and the public `/health` endpoint. A failed
+test or migration stops the rollout. Check **Actions → Validate & Deploy** for
+progress and errors. **Run workflow** on `main` with `deploy` checked can rerun the
+current release manually.
+
+`infra/github-actions.bicep` configures the dedicated `id-frameseek-github` managed
+identity and GitHub OIDC trust for `saksham115/frameseek`'s `main` branch. It grants
+resource metadata read access, ACR build access, deployment access to the four
+app/job resources, and permission to attach their existing runtime identity.
+It does not grant direct database, Blob or Key Vault data access. Application
+secrets remain in Azure Key Vault; no Azure client secret is stored in GitHub.
+
+One-time setup (already applied for the production environment):
+
+```bash
+az deployment group create -g frameseek-prod -n github-actions \
+  -f infra/github-actions.bicep
+```
+
+Repository **Settings → Secrets and variables → Actions → Variables** contains
+`AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `ACR_NAME`,
+`RESOURCE_GROUP`, `API_APP`, `WORKER_JOB`, `WEB_APP`, and `MIGRATION_JOB`.
+The first three come from the setup deployment outputs. These are identifiers,
+not secrets. Infrastructure or environment-setting changes still require the
+appropriate `infra/production.bicep` or `infra/production-apps.bicep` deployment;
+a normal Git push rolls application images only.
 
 Clip-export release checks: open a processed video, choose **Export clip**, set a
 range, confirm selection preview stops at the out point, export, and download MP4.

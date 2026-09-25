@@ -1,7 +1,8 @@
 name: Validate & Deploy
 
 # Builds the API/worker and web images in ACR, runs DB migrations, and rolls the
-# Container Apps. Uses OIDC federated credentials (no stored cloud secrets).
+# Container Apps after successful checks on main. Uses GitHub OIDC, without
+# stored Azure credentials. Pull requests and codex/** branches only run checks.
 #
 # Required repo configuration:
 #   vars:    AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID,
@@ -18,8 +19,11 @@ on:
         default: false
 
 permissions:
-  id-token: write
   contents: read
+
+concurrency:
+  group: frameseek-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   test-backend:
@@ -70,35 +74,66 @@ jobs:
       - run: bun run build
 
   build-and-deploy:
-    if: github.event_name == 'workflow_dispatch' && inputs.deploy
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.deploy))
     needs: [test-backend, test-web]
     runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      ACR_NAME: ${{ vars.ACR_NAME }}
+      RESOURCE_GROUP: ${{ vars.RESOURCE_GROUP }}
+      API_APP: ${{ vars.API_APP }}
+      WORKER_JOB: ${{ vars.WORKER_JOB }}
+      WEB_APP: ${{ vars.WEB_APP }}
+      MIGRATION_JOB: ${{ vars.MIGRATION_JOB }}
     steps:
       - uses: actions/checkout@v4
 
+      # A slower, older test run must not overwrite a newer production release.
+      - name: Check that this commit is still main
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          CURRENT_SHA=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')
+          if [[ "$CURRENT_SHA" == "$GITHUB_SHA" ]]; then
+            echo 'deploy=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'deploy=false' >> "$GITHUB_OUTPUT"
+            echo 'A newer main commit exists; skipping this release.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - uses: azure/login@v2
+        if: steps.release.outputs.deploy == 'true'
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
       - name: Build images in ACR
+        if: steps.release.outputs.deploy == 'true'
         run: |
-          TAG=${GITHUB_SHA::8}
-          az acr build -r ${{ vars.ACR_NAME }} -t frameseek-api:$TAG -t frameseek-api:latest ./backend
-          az acr build -r ${{ vars.ACR_NAME }} -t frameseek-web:$TAG -t frameseek-web:latest ./web
+          az acr build -r "$ACR_NAME" -t "frameseek-api:$GITHUB_SHA" ./backend
+          az acr build -r "$ACR_NAME" -t "frameseek-web:$GITHUB_SHA" ./web
+
+      - name: Install Container Apps CLI
+        if: steps.release.outputs.deploy == 'true'
+        run: az extension add --name containerapp --upgrade --yes
 
       - name: Run database migrations
+        if: steps.release.outputs.deploy == 'true'
         run: |
           set -euo pipefail
-          TAG=${GITHUB_SHA::8}
           az containerapp job update \
-            --name ${{ vars.MIGRATION_JOB }} --resource-group ${{ vars.RESOURCE_GROUP }} \
-            --image ${{ vars.ACR_NAME }}.azurecr.io/frameseek-api:$TAG \
+            --name "$MIGRATION_JOB" --resource-group "$RESOURCE_GROUP" \
+            --image "$ACR_NAME.azurecr.io/frameseek-api:$GITHUB_SHA" \
             --command alembic upgrade head --output none
-          EXECUTION=$(az containerapp job start -n ${{ vars.MIGRATION_JOB }} -g ${{ vars.RESOURCE_GROUP }} --query name -o tsv)
+          EXECUTION=$(az containerapp job start -n "$MIGRATION_JOB" -g "$RESOURCE_GROUP" --query name -o tsv)
+          echo "Migration execution: $EXECUTION" >> "$GITHUB_STEP_SUMMARY"
           for attempt in $(seq 1 90); do
-            STATUS=$(az containerapp job execution show -n ${{ vars.MIGRATION_JOB }} -g ${{ vars.RESOURCE_GROUP }} --job-execution-name "$EXECUTION" --query properties.status -o tsv)
+            STATUS=$(az containerapp job execution show -n "$MIGRATION_JOB" -g "$RESOURCE_GROUP" --job-execution-name "$EXECUTION" --query properties.status -o tsv)
             if [ "$STATUS" = Succeeded ]; then exit 0; fi
             if [ "$STATUS" = Failed ]; then echo 'Migration failed; rollout stopped.'; exit 1; fi
             sleep 10
@@ -107,9 +142,32 @@ jobs:
           exit 1
 
       - name: Deploy API, worker, and web
+        if: steps.release.outputs.deploy == 'true'
         run: |
-          TAG=${GITHUB_SHA::8}
-          REG=${{ vars.ACR_NAME }}.azurecr.io
-          az containerapp update -n ${{ vars.API_APP }} -g ${{ vars.RESOURCE_GROUP }} --image $REG/frameseek-api:$TAG
-          az containerapp job update -n ${{ vars.WORKER_JOB }} -g ${{ vars.RESOURCE_GROUP }} --image $REG/frameseek-api:$TAG
-          az containerapp update -n ${{ vars.WEB_APP }} -g ${{ vars.RESOURCE_GROUP }} --image $REG/frameseek-web:$TAG
+          REG="$ACR_NAME.azurecr.io"
+          az containerapp update -n "$API_APP" -g "$RESOURCE_GROUP" --image "$REG/frameseek-api:$GITHUB_SHA" --output none
+          az containerapp job update -n "$WORKER_JOB" -g "$RESOURCE_GROUP" --image "$REG/frameseek-api:$GITHUB_SHA" --output none
+          az containerapp update -n "$WEB_APP" -g "$RESOURCE_GROUP" --image "$REG/frameseek-web:$GITHUB_SHA" --output none
+
+      - name: Verify the deployed revisions and public health endpoint
+        if: steps.release.outputs.deploy == 'true'
+        run: |
+          set -euo pipefail
+          for APP in "$API_APP" "$WEB_APP"; do
+            READY=false
+            for attempt in $(seq 1 60); do
+              STATE=$(az containerapp show -n "$APP" -g "$RESOURCE_GROUP" --query '{latest:properties.latestRevisionName,ready:properties.latestReadyRevisionName,image:properties.template.containers[0].image}' -o json)
+              if jq -e --arg tag ":$GITHUB_SHA" '.latest != null and .latest == .ready and (.image | endswith($tag))' <<< "$STATE" > /dev/null; then
+                READY=true
+                break
+              fi
+              sleep 10
+            done
+            if [[ "$READY" != true ]]; then
+              echo "::error::$APP did not become ready; inspect its revision logs."
+              exit 1
+            fi
+          done
+          FQDN=$(az containerapp show -n "$WEB_APP" -g "$RESOURCE_GROUP" --query properties.configuration.ingress.fqdn -o tsv)
+          curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 10 --max-time 30 "https://$FQDN/health"
+          echo "Deployed commit $GITHUB_SHA to https://$FQDN" >> "$GITHUB_STEP_SUMMARY"
