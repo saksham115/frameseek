@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from tests.factories import create_frame, create_job, create_video
+from tests.factories import create_folder, create_frame, create_job, create_video
 
 URL = "/api/v1/videos"
 
@@ -93,9 +93,62 @@ class TestListVideos:
         assert videos[0]["title"] == "Alpha"
         assert videos[1]["title"] == "Bravo"
 
+    async def test_list_unknown_sort_falls_back_to_created_at(self, client, db_session, test_user):
+        await create_video(db_session, test_user["user_id"], title="V")
+
+        resp = await client.get(URL, params={"sort": "user_id"}, headers=test_user["headers"])
+        assert resp.status_code == 200
+        assert len(resp.json()["data"]["videos"]) == 1
+
+    async def test_list_title_filter(self, client, db_session, test_user):
+        await create_video(db_session, test_user["user_id"], title="Beach Sunset")
+        await create_video(db_session, test_user["user_id"], title="City at night")
+
+        resp = await client.get(URL, params={"q": "sunset"}, headers=test_user["headers"])
+        body = resp.json()["data"]
+        assert [v["title"] for v in body["videos"]] == ["Beach Sunset"]
+        assert body["pagination"]["total"] == 1
+
+    async def test_list_title_filter_escapes_wildcards(self, client, db_session, test_user):
+        await create_video(db_session, test_user["user_id"], title="100% raw")
+        await create_video(db_session, test_user["user_id"], title="100 takes")
+
+        resp = await client.get(URL, params={"q": "100%"}, headers=test_user["headers"])
+        assert [v["title"] for v in resp.json()["data"]["videos"]] == ["100% raw"]
+
     async def test_list_unauthenticated(self, client):
         resp = await client.get(URL)
         assert resp.status_code == 401
+
+
+class TestMoveVideo:
+    async def test_move_into_folder(self, client, test_user, test_video, test_folder):
+        resp = await client.patch(
+            f"{URL}/{test_video.video_id}",
+            headers=test_user["headers"],
+            json={"folder_id": str(test_folder.folder_id)},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["data"]["video"]["folder_id"] == str(test_folder.folder_id)
+
+    async def test_move_out_of_folder(self, client, db_session, test_user, test_folder):
+        video = await create_video(db_session, test_user["user_id"], folder_id=test_folder.folder_id)
+        resp = await client.patch(
+            f"{URL}/{video.video_id}", headers=test_user["headers"], json={"folder_id": None}
+        )
+        assert resp.status_code == 200
+        assert resp.json()["data"]["video"]["folder_id"] is None
+
+    async def test_move_into_other_users_folder_rejected(
+        self, client, db_session, test_user, second_user, test_video
+    ):
+        foreign = await create_folder(db_session, second_user["user_id"], name="Theirs")
+        resp = await client.patch(
+            f"{URL}/{test_video.video_id}",
+            headers=test_user["headers"],
+            json={"folder_id": str(foreign.folder_id)},
+        )
+        assert resp.status_code == 404
 
 
 # ── Upload ──────────────────────────────────────────────────────────────────
@@ -216,6 +269,30 @@ class TestDeleteVideo:
         # Verify it's gone from listing
         list_resp = await client.get(URL, headers=test_user["headers"])
         assert len(list_resp.json()["data"]["videos"]) == 0
+
+    async def test_delete_abandoned_upload_does_not_refund_quota(self, client, db_session, test_user):
+        test_user["user"].storage_used_bytes = 10_000
+        await db_session.commit()
+        target = await client.post(
+            f"{URL}/upload-url", headers=test_user["headers"], json=_upload_request(size_bytes=4096)
+        )
+        video_id = target.json()["data"]["video_id"]
+
+        resp = await client.delete(f"{URL}/{video_id}", headers=test_user["headers"])
+        assert resp.status_code == 200
+        await db_session.refresh(test_user["user"])
+        assert test_user["user"].storage_used_bytes == 10_000
+
+    async def test_delete_finalized_upload_refunds_quota(self, client, db_session, test_user):
+        target = await client.post(f"{URL}/upload-url", headers=test_user["headers"], json=_upload_request())
+        video_id = target.json()["data"]["video_id"]
+        client.mock_blob.get_blob_size.return_value = 2048
+        await client.post(f"{URL}/{video_id}/finalize", headers=test_user["headers"])
+
+        resp = await client.delete(f"{URL}/{video_id}", headers=test_user["headers"])
+        assert resp.status_code == 200
+        await db_session.refresh(test_user["user"])
+        assert test_user["user"].storage_used_bytes == 0
 
     async def test_delete_not_found(self, client, test_user):
         resp = await client.delete(f"{URL}/{uuid.uuid4()}", headers=test_user["headers"])

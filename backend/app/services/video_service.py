@@ -96,6 +96,11 @@ class VideoService:
         if not video:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
 
+        # Quota is reserved at finalize, which always creates a processing job. An upload that
+        # was abandoned before finalize ("uploaded", no job) never reserved anything, so it
+        # must not be refunded either.
+        reserved_quota = video.status != "uploaded" or await self.repo.has_jobs(video_id)
+
         clip_service = ClipService(self.repo.db)
         await clip_service.delete_clips_for_video(video_id, user_id)
 
@@ -117,7 +122,8 @@ class VideoService:
             await asyncio.to_thread(GCSClient.get().delete_prefix, f"videos/{video.user_id}/{video_id}/")
             await asyncio.to_thread(GCSClient.get().delete_prefix, f"frames/{video_id}/")
 
-        await self.storage_service.update_storage_used(user_id, -(video.file_size_bytes or 0))
+        if reserved_quota:
+            await self.storage_service.update_storage_used(user_id, -(video.file_size_bytes or 0))
         await self.repo.delete(video)
 
     async def get_frame_count(self, video_id: UUID) -> int:

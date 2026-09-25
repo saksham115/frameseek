@@ -1,19 +1,29 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { useMutation } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowRight,
   ArrowUpRight,
   Focus,
+  History,
   Image,
+  Play,
   ScanLine,
   Search as SearchIcon,
   Sparkles,
 } from "lucide-react";
-import { search } from "@/api/search";
+import {
+  getSearchHistory,
+  getSearchQuota,
+  searchWithQuota,
+  type SearchQuota,
+} from "@/api/search";
+import type { SearchMatch } from "@/api/types";
 import { Button } from "@/components/ui/button";
 import { MediaThumbnail, PageHeader } from "@/components/MediaUI";
+import { errorStatus } from "@/lib/errors";
 import { formatTimestamp } from "@/lib/format";
+import { SEARCH_INPUT_ID } from "@/lib/navigation";
 
 const SUGGESTIONS = [
   "A person by the ocean",
@@ -21,22 +31,111 @@ const SUGGESTIONS = [
   "Someone laughing",
   "A city at night",
 ];
+// Frames closer than this in one video are the same moment for a viewer.
+const SAME_MOMENT_SECONDS = 4;
+
+interface VideoGroup {
+  video_id: string;
+  video_title: string;
+  best: SearchMatch;
+  moments: SearchMatch[];
+}
+
+/** One card per video: its best frame, plus other distinct moments in time order. */
+function groupByVideo(matches: SearchMatch[]): VideoGroup[] {
+  const groups = new Map<string, VideoGroup>();
+  for (const m of matches) {
+    const g = groups.get(m.video_id);
+    if (!g) {
+      groups.set(m.video_id, {
+        video_id: m.video_id,
+        video_title: m.video_title,
+        best: m,
+        moments: [m],
+      });
+    } else if (
+      g.moments.every(
+        (o) => Math.abs(o.timestamp_seconds - m.timestamp_seconds) >= SAME_MOMENT_SECONDS,
+      )
+    ) {
+      g.moments.push(m);
+    }
+  }
+  return [...groups.values()].map((g) => ({
+    ...g,
+    moments: [...g.moments].sort((a, b) => a.timestamp_seconds - b.timestamp_seconds),
+  }));
+}
+
+function quotaLabel(quota: SearchQuota) {
+  if (quota.limit < 0) return "Unlimited searches";
+  return `${quota.remaining} of ${quota.limit} searches left this month`;
+}
+
+function resetLabel(quota: SearchQuota) {
+  const base = quota.resets_at ? new Date(quota.resets_at) : new Date();
+  const next = new Date(base.getFullYear(), base.getMonth() + 1, 1);
+  return next.toLocaleDateString(undefined, { month: "long", day: "numeric" });
+}
+
 export default function Search() {
-  const [query, setQuery] = useState("");
+  const [params, setParams] = useSearchParams();
+  const submitted = params.get("q")?.trim() ?? "";
+  const [query, setQuery] = useState(submitted);
   const navigate = useNavigate();
+  const qc = useQueryClient();
+  useEffect(() => setQuery(submitted), [submitted]);
+
+  const { data: quota } = useQuery({
+    queryKey: ["search-quota"],
+    queryFn: getSearchQuota,
+  });
+  const { data: history } = useQuery({
+    queryKey: ["search-history"],
+    queryFn: () => getSearchHistory(30),
+  });
+  // Each run spends quota, so results are cached for the session: going Back to this
+  // page, or repeating a query, reuses them instead of searching again.
   const {
-    mutate,
-    data: matches,
-    variables,
-    isPending,
+    data: result,
+    isFetching: isPending,
     isError,
-    isIdle,
-  } = useMutation({ mutationFn: (q: string) => search(q) });
+    error,
+  } = useQuery({
+    queryKey: ["search", submitted],
+    queryFn: async () => {
+      const r = await searchWithQuota(submitted, undefined, 40);
+      if (r.quota) qc.setQueryData(["search-quota"], r.quota);
+      qc.invalidateQueries({ queryKey: ["search-history"] });
+      return r;
+    },
+    enabled: !!submitted,
+    staleTime: Infinity,
+    gcTime: 60 * 60_000,
+    retry: false,
+  });
+  const groups = useMemo(() => groupByVideo(result?.matches ?? []), [result]);
+  const recent = useMemo(() => {
+    const seen = new Set<string>();
+    return (history ?? [])
+      .filter((h) => {
+        const key = h.query.trim().toLowerCase();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .slice(0, 6);
+  }, [history]);
+  const outOfSearches = !!quota && quota.limit >= 0 && quota.remaining <= 0;
+
   const run = (q: string) => {
-    if (!q.trim() || isPending) return;
-    setQuery(q.trim());
-    mutate(q.trim());
+    const text = q.trim();
+    if (!text || isPending) return;
+    setQuery(text);
+    setParams({ q: text });
   };
+  const quotaError = errorStatus(error) === 429;
+
   return (
     <div className="search-page">
       <PageHeader
@@ -44,9 +143,24 @@ export default function Search() {
         title="Find the moment."
         description="Describe what you remember. We’ll find where it happens."
         action={
-          <span className="status-badge status-completed">
-            <Sparkles size={11} /> Visual search
-          </span>
+          quota ? (
+            <span
+              className={
+                outOfSearches
+                  ? "status-badge status-failed"
+                  : "status-badge status-completed"
+              }
+              title={
+                quota.limit >= 0 ? `Resets ${resetLabel(quota)}` : undefined
+              }
+            >
+              <Sparkles size={11} /> {quotaLabel(quota)}
+            </span>
+          ) : (
+            <span className="status-badge status-completed">
+              <Sparkles size={11} /> Visual search
+            </span>
+          )
         }
       />
       <form
@@ -58,6 +172,7 @@ export default function Search() {
       >
         <SearchIcon size={19} />
         <input
+          id={SEARCH_INPUT_ID}
           autoFocus
           aria-label="Describe a moment"
           value={query}
@@ -67,7 +182,7 @@ export default function Search() {
         />
         <Button
           className="studio-button"
-          disabled={isPending || !query.trim()}
+          disabled={isPending || !query.trim() || outOfSearches}
           type="submit"
         >
           {isPending ? "Searching…" : "Search"}
@@ -75,20 +190,49 @@ export default function Search() {
         </Button>
       </form>
       <div className="search-suggestions">
-        <span>A LITTLE INSPIRATION</span>
-        {SUGGESTIONS.map((s) => (
-          <button
-            key={s}
-            className="suggestion"
-            disabled={isPending}
-            onClick={() => setQuery(s)}
-          >
-            {s}
-            <ArrowUpRight size={10} />
-          </button>
-        ))}
+        {recent.length ? (
+          <>
+            <span className="flex items-center gap-1.5">
+              <History size={11} /> RECENT
+            </span>
+            {recent.map((h) => (
+              <button
+                key={h.search_id}
+                className="suggestion"
+                disabled={isPending || outOfSearches}
+                onClick={() => run(h.query)}
+                title={`${h.results_count} results last time`}
+              >
+                {h.query}
+                <ArrowUpRight size={10} />
+              </button>
+            ))}
+          </>
+        ) : (
+          <>
+            <span>A LITTLE INSPIRATION</span>
+            {SUGGESTIONS.map((s) => (
+              <button
+                key={s}
+                className="suggestion"
+                disabled={isPending || outOfSearches}
+                onClick={() => run(s)}
+              >
+                {s}
+                <ArrowUpRight size={10} />
+              </button>
+            ))}
+          </>
+        )}
       </div>
-      {isError && (
+      {(outOfSearches || quotaError) && (
+        <div className="error-state quota-state" role="alert">
+          You’ve used all {quota?.limit ?? ""} searches for this month. They
+          reset on {quota ? resetLabel(quota) : "the 1st"}. Search results you’ve
+          already run on this page stay available.
+        </div>
+      )}
+      {isError && !quotaError && (
         <div className="error-state" role="alert">
           Search is temporarily unavailable. Please try again.
         </div>
@@ -106,7 +250,7 @@ export default function Search() {
           </div>
         </div>
       )}
-      {isIdle && (
+      {!submitted && (
         <>
           <div className="search-intro">
             <div className="search-orbit" aria-hidden="true">
@@ -141,43 +285,75 @@ export default function Search() {
           </div>
         </>
       )}
-      {!isPending && !isError && matches && (
+      {!isPending && result && (
         <>
           <div className="search-results-heading">
             <strong>
-              {matches.length
-                ? `Results for “${variables}”`
+              {groups.length
+                ? `Results for “${submitted}”`
                 : "No matching moments yet"}
             </strong>
-            <span>{matches.length} frames · Best matches first</span>
+            <span>
+              {groups.length} {groups.length === 1 ? "video" : "videos"} ·{" "}
+              {result.matches.length} frames · Best matches first
+            </span>
           </div>
-          {matches.length ? (
+          {groups.length ? (
             <div className="media-grid">
-              {matches.map((m, i) => (
-                <button
-                  className="media-card result-card"
-                  key={`${m.video_id}-${m.timestamp_seconds}-${i}`}
-                  onClick={() =>
-                    navigate(`/videos/${m.video_id}?t=${m.timestamp_seconds}`)
-                  }
-                >
-                  <div className="media-card-preview">
-                    <MediaThumbnail src={m.frame_url} />
-                    <div className="preview-shade" />
-                    <span className="timecode">
-                      {formatTimestamp(m.timestamp_seconds)}
-                    </span>
-                  </div>
-                  <div className="media-card-info">
-                    <span className="media-card-title">{m.video_title}</span>
-                    <div className="media-card-meta">
-                      <span>
-                        Visual similarity {Math.round(m.score * 100)}%
+              {groups.map((g) => (
+                <div className="media-card result-card" key={g.video_id}>
+                  <button
+                    className="block w-full text-left"
+                    onClick={() =>
+                      navigate(
+                        `/videos/${g.video_id}?t=${g.best.timestamp_seconds}`,
+                      )
+                    }
+                  >
+                    <div className="media-card-preview">
+                      <MediaThumbnail src={g.best.frame_url} />
+                      <div className="preview-shade" />
+                      <span className="preview-play">
+                        <Play size={15} fill="currentColor" />
                       </span>
-                      <ArrowUpRight size={13} />
+                      <span className="timecode">
+                        {formatTimestamp(g.best.timestamp_seconds)}
+                      </span>
                     </div>
-                  </div>
-                </button>
+                    <div className="media-card-info">
+                      <span className="media-card-title">{g.video_title}</span>
+                      <div className="media-card-meta">
+                        <span>
+                          Best match {Math.round(g.best.score * 100)}% visual
+                          similarity
+                        </span>
+                        <ArrowUpRight size={13} />
+                      </div>
+                    </div>
+                  </button>
+                  {g.moments.length > 1 && (
+                    <div className="result-moments" aria-label="Other moments">
+                      <span>
+                        {g.moments.length} MOMENTS
+                      </span>
+                      {g.moments.slice(0, 6).map((m) => (
+                        <Link
+                          key={m.timestamp_seconds}
+                          className={
+                            m === g.best ? "moment-chip is-best" : "moment-chip"
+                          }
+                          to={`/videos/${g.video_id}?t=${m.timestamp_seconds}`}
+                          aria-label={`Open ${g.video_title} at ${formatTimestamp(m.timestamp_seconds)}`}
+                        >
+                          {formatTimestamp(m.timestamp_seconds)}
+                        </Link>
+                      ))}
+                      {g.moments.length > 6 && (
+                        <span>+{g.moments.length - 6}</span>
+                      )}
+                    </div>
+                  )}
+                </div>
               ))}
             </div>
           ) : (

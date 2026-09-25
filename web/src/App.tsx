@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/store/auth";
 import { setAuthFailureHandler } from "@/api/client";
 import AppShell from "@/components/AppShell";
@@ -12,14 +12,29 @@ import VideoDetail from "@/pages/VideoDetail";
 import Settings from "@/pages/Settings";
 import Paywall from "@/pages/Paywall";
 import NotFound from "@/pages/NotFound";
+import { rememberReturnPath, takeReturnPath } from "@/lib/navigation";
+
+/** Sends anonymous visitors to sign in, remembering the page they were trying to open. */
+function RedirectToLogin() {
+  const location = useLocation();
+  rememberReturnPath(location.pathname + location.search + location.hash);
+  return <Navigate to="/login" replace />;
+}
 
 const App = () => {
   const { status, loadSession, setAnonymous } = useAuth();
+  const navigate = useNavigate();
 
   useEffect(() => {
     setAuthFailureHandler(setAnonymous);
     loadSession();
   }, [loadSession, setAnonymous]);
+
+  useEffect(() => {
+    if (status !== "authenticated") return;
+    const path = takeReturnPath();
+    if (path) navigate(path, { replace: true });
+  }, [status, navigate]);
 
   if (status === "loading") {
     return (
@@ -38,7 +53,7 @@ const App = () => {
     return (
       <Routes>
         <Route path="/login" element={<Login />} />
-        <Route path="*" element={<Navigate to="/login" replace />} />
+        <Route path="*" element={<RedirectToLogin />} />
       </Routes>
     );
   }

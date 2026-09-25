@@ -7,16 +7,37 @@ export interface Pagination {
   total: number;
   total_pages: number;
 }
-export async function getLibrary(
+export const LIBRARY_PAGE_SIZE = 12;
+
+export interface LibraryQuery {
+  page?: number;
+  sort?: string;
+  order?: string;
+  status?: string;
+  folderId?: string;
+  q?: string;
+}
+
+export async function getLibrary({
   page = 1,
   sort = "created_at",
   order = "desc",
-  status?: string,
-) {
+  status,
+  folderId,
+  q,
+}: LibraryQuery = {}) {
   const { data } = await api.get<{ videos: unknown[]; pagination: Pagination }>(
     "/videos",
     {
-      params: { page, limit: 12, sort, order, status: status || undefined },
+      params: {
+        page,
+        limit: LIBRARY_PAGE_SIZE,
+        sort,
+        order,
+        status: status || undefined,
+        folder_id: folderId || undefined,
+        q: q?.trim() || undefined,
+      },
     },
   );
   return {
@@ -63,6 +84,19 @@ export async function renameVideo(id: string, title: string) {
   await api.patch(`/videos/${id}`, { title });
 }
 
+export async function moveVideo(id: string, folderId: string | null) {
+  await api.patch(`/videos/${id}`, { folder_id: folderId });
+}
+
+/** Re-run the full processing pipeline (used to recover a failed video). */
+export async function reprocessVideo(id: string) {
+  await api.post(`/videos/${id}/process`, {});
+}
+
+export async function retryTranscript(id: string) {
+  await api.post(`/videos/${id}/retry-transcript`);
+}
+
 export async function listVideos(): Promise<Video[]> {
   const { data } = await api.get<{ videos: unknown[] }>("/videos");
   return (data.videos ?? []).map((v) => mapVideo(v as never));
@@ -79,6 +113,7 @@ export async function createUploadTarget(
   filename: string,
   sizeBytes: number,
   contentType: string,
+  folderId?: string | null,
 ) {
   const { data } = await api.post<{ video_id: string; upload_url: string }>(
     "/videos/upload-url",
@@ -86,6 +121,7 @@ export async function createUploadTarget(
       filename,
       size_bytes: sizeBytes,
       content_type: contentType,
+      folder_id: folderId || undefined,
     },
   );
   return data;
@@ -95,9 +131,11 @@ export async function uploadToBlob(
   uploadUrl: string,
   file: File,
   onProgress?: (fraction: number) => void,
+  signal?: AbortSignal,
 ): Promise<void> {
   await api.put(uploadUrl, file, {
     baseURL: "",
+    signal,
     withCredentials: false,
     headers: {
       "Content-Type": file.type,
@@ -109,8 +147,13 @@ export async function uploadToBlob(
   });
 }
 
-export async function finalizeUpload(videoId: string): Promise<Video> {
-  const { data } = await api.post<unknown>(`/videos/${videoId}/finalize`);
+export async function finalizeUpload(
+  videoId: string,
+  signal?: AbortSignal,
+): Promise<Video> {
+  const { data } = await api.post<unknown>(`/videos/${videoId}/finalize`, undefined, {
+    signal,
+  });
   return mapVideo(data as never);
 }
 

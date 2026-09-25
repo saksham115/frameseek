@@ -1,86 +1,179 @@
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { Check } from "lucide-react";
+import { ArrowLeft, Check, HardDrive, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { getPaymentConfig, listPlans, startCheckout } from "@/api/subscriptions";
 import type { Plan } from "@/api/types";
 import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/MediaUI";
+import { apiErrorMessage } from "@/lib/errors";
+import { formatBytes } from "@/lib/format";
 import { useAuth } from "@/store/auth";
+import { cn } from "@/lib/utils";
 
 const Paywall = () => {
   const { user } = useAuth();
   const { data: paymentConfig, isLoading: paymentsLoading } = useQuery({
-    queryKey: ["payment-config"], queryFn: getPaymentConfig,
+    queryKey: ["payment-config"],
+    queryFn: getPaymentConfig,
   });
-  const { data: plans, isLoading } = useQuery({
-    queryKey: ["plans"], queryFn: listPlans, enabled: paymentConfig?.payments_enabled === true,
+  const {
+    data: plans,
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({
+    queryKey: ["plans"],
+    queryFn: listPlans,
+    enabled: paymentConfig?.payments_enabled === true,
   });
 
   const checkout = useMutation<string, unknown, string>({
     mutationFn: (priceId) => startCheckout(priceId),
     onSuccess: (url) => (window.location.href = url),
-    onError: () => toast.error("Couldn’t start checkout."),
+    onError: (e) => toast.error(apiErrorMessage(e, "Couldn’t start checkout.")),
   });
 
   const features = (p: Plan) => [
-    `${p.storage_gb} GB storage`,
-    `${p.monthly_searches.toLocaleString()} searches / month`,
+    `${p.storage_gb} GB of video storage`,
+    p.monthly_searches < 0
+      ? "Unlimited visual searches"
+      : `${p.monthly_searches.toLocaleString()} visual searches a month`,
+    "Transcripts and clip exports",
   ];
 
-  if (paymentsLoading) return <p className="text-center text-muted-foreground">Loading plans…</p>;
+  const header = (
+    <PageHeader
+      eyebrow="ROOM TO GROW"
+      title="Plans for every workflow."
+      description="More storage and searches when your library grows. Upgrade or cancel any time."
+      action={
+        <Button asChild variant="outline" className="studio-button">
+          <Link to="/settings">
+            <ArrowLeft /> Back to settings
+          </Link>
+        </Button>
+      }
+    />
+  );
+
+  if (paymentsLoading) {
+    return (
+      <div>
+        {header}
+        <div className="plan-grid">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="skeleton h-72" />
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   if (!paymentConfig?.payments_enabled) {
     return (
-      <div className="max-w-xl mx-auto text-center space-y-4">
-        <h1 className="text-3xl font-bold tracking-tight">Payments are currently unavailable</h1>
-        <p className="text-muted-foreground">You can continue using FrameSeek on your current plan.</p>
-        <Button asChild><Link to="/">Back to library</Link></Button>
+      <div>
+        {header}
+        <div className="empty-state">
+          <div className="empty-icon">
+            <Sparkles size={22} strokeWidth={1.3} />
+          </div>
+          <h2>Upgrades aren’t open yet</h2>
+          <p>
+            You can keep using FrameSeek on your current plan. To free up space,
+            delete videos you no longer need from the library.
+          </p>
+          <Button asChild className="studio-button mt-6" variant="outline">
+            <Link to="/">Back to library</Link>
+          </Button>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-4xl mx-auto">
-      <h1 className="text-3xl font-bold tracking-tight text-center mb-2">Choose your plan</h1>
-      <p className="text-muted-foreground text-center mb-10">Upgrade any time. Cancel any time.</p>
-
-      {isLoading ? (
-        <div className="grid sm:grid-cols-3 gap-5">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="h-80 rounded-2xl bg-secondary animate-pulse" />
+    <div>
+      {header}
+      {user && (
+        <div className="plan-usage">
+          <HardDrive size={14} />
+          You’re on the <strong className="capitalize">{user.plan.replace(/_/g, " ")}</strong> plan,
+          using {formatBytes(user.storage_used_bytes)} of{" "}
+          {formatBytes(user.storage_limit_bytes)}.
+        </div>
+      )}
+      {isError ? (
+        <div className="error-state" role="alert">
+          We couldn’t load plans.{" "}
+          <button className="underline ml-2" onClick={() => refetch()}>
+            Try again
+          </button>
+        </div>
+      ) : isLoading ? (
+        <div className="plan-grid">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="skeleton h-72" />
           ))}
         </div>
       ) : (
-        <div className="grid sm:grid-cols-3 gap-5">
+        <div className="plan-grid">
           {plans?.map((p) => {
             const current = user?.plan === p.id;
+            const featured = p.id === "pro";
             return (
-              <div
+              <section
                 key={p.id}
-                className="rounded-2xl border border-border bg-card p-6 flex flex-col data-[featured=true]:border-primary"
-                data-featured={p.id === "pro"}
+                className={cn(
+                  "plan-card",
+                  featured && "is-featured",
+                  current && "is-current",
+                )}
               >
-                <h2 className="text-xl font-bold">{p.name}</h2>
-                <ul className="mt-6 space-y-3 flex-1">
+                <div className="plan-card-head">
+                  <h2>{p.name}</h2>
+                  {current ? (
+                    <span className="status-badge status-completed">
+                      <Check size={11} /> Current
+                    </span>
+                  ) : featured ? (
+                    <span className="status-badge status-completed">
+                      <Sparkles size={11} /> Popular
+                    </span>
+                  ) : null}
+                </div>
+                <p className="plan-storage">
+                  <strong>{p.storage_gb}</strong> GB
+                </p>
+                <ul>
                   {features(p).map((f) => (
-                    <li key={f} className="flex items-center gap-2 text-sm">
-                      <Check className="h-4 w-4 text-primary shrink-0" /> {f}
+                    <li key={f}>
+                      <Check size={13} /> {f}
                     </li>
                   ))}
                 </ul>
                 <Button
-                  className="mt-6"
-                  variant={p.id === "pro" ? "default" : "outline"}
+                  className="studio-button w-full"
+                  variant={featured ? "default" : "outline"}
                   disabled={current || !p.price_id || checkout.isPending}
                   onClick={() => p.price_id && checkout.mutate(p.price_id)}
                 >
-                  {current ? "Current plan" : p.price_id ? "Upgrade" : p.id === "free" ? "Free" : "Currently unavailable"}
+                  {current
+                    ? "Your current plan"
+                    : p.price_id
+                      ? `Upgrade to ${p.name}`
+                      : p.id === "free"
+                        ? "Included"
+                        : "Coming soon"}
                 </Button>
-              </div>
+              </section>
             );
           })}
         </div>
       )}
+      <p className="plan-footnote">
+        Payments are handled securely by Stripe. Manage or cancel from Settings →
+        Billing at any time.
+      </p>
     </div>
   );
 };

@@ -8,6 +8,9 @@ from app.models.job import Job
 from app.models.video import Video
 
 
+_SORTABLE = {"created_at": Video.created_at, "title": Video.title}
+
+
 class VideoRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -21,7 +24,7 @@ class VideoRepository:
     async def list_videos(
         self, user_id: UUID, folder_id: UUID | None = None, status: str | None = None,
         source_type: str | None = None, page: int = 1, limit: int = 20,
-        sort: str = "created_at", order: str = "desc"
+        sort: str = "created_at", order: str = "desc", q: str | None = None,
     ) -> tuple[list[Video], int]:
         query = select(Video).where(Video.user_id == user_id, Video.deleted_at.is_(None))
         count_query = select(func.count()).select_from(Video).where(Video.user_id == user_id, Video.deleted_at.is_(None))
@@ -36,7 +39,13 @@ class VideoRepository:
             query = query.where(Video.source_type == source_type)
             count_query = count_query.where(Video.source_type == source_type)
 
-        sort_col = getattr(Video, sort, Video.created_at)
+        if q and q.strip():
+            escaped = q.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            title_match = Video.title.ilike(f"%{escaped}%", escape="\\")
+            query = query.where(title_match)
+            count_query = count_query.where(title_match)
+
+        sort_col = _SORTABLE.get(sort, Video.created_at)
         query = query.order_by(sort_col.desc() if order == "desc" else sort_col.asc())
         query = query.offset((page - 1) * limit).limit(limit)
 
@@ -77,6 +86,10 @@ class VideoRepository:
     async def get_frame_count(self, video_id: UUID) -> int:
         result = await self.db.execute(select(func.count()).select_from(Frame).where(Frame.video_id == video_id))
         return result.scalar() or 0
+
+    async def has_jobs(self, video_id: UUID) -> bool:
+        result = await self.db.execute(select(Job.job_id).where(Job.video_id == video_id).limit(1))
+        return result.first() is not None
 
     async def list_frames(self, video_id: UUID, page: int = 1, limit: int = 50) -> tuple[list[Frame], int]:
         query = select(Frame).where(Frame.video_id == video_id).order_by(Frame.frame_index).offset((page - 1) * limit).limit(limit)

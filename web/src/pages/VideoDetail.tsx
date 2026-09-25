@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
   Check,
@@ -15,6 +15,7 @@ import {
   Pause,
   Pencil,
   Play,
+  RotateCcw,
   Search as SearchIcon,
   Scissors,
   SkipBack,
@@ -24,7 +25,13 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
-import { getFrames, getTranscript, getVideo, renameVideo } from "@/api/videos";
+import {
+  getFrames,
+  getTranscript,
+  getVideo,
+  renameVideo,
+  retryTranscript,
+} from "@/api/videos";
 import { search } from "@/api/search";
 import type { SearchMatch } from "@/api/types";
 import { Button } from "@/components/ui/button";
@@ -33,6 +40,8 @@ import { formatBytes, formatTimestamp } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import ClipTools, { ClipRangeSlider } from "@/components/ClipTools";
 import { formatClipTime, type ClipRange } from "@/lib/clip-time";
+import VideoActionsMenu, { useVideoMutations } from "@/components/VideoActions";
+import { apiErrorMessage, errorStatus } from "@/lib/errors";
 import "@/clip-tools.css";
 
 export default function VideoDetail() {
@@ -44,7 +53,7 @@ export default function VideoDetail() {
   const pendingSeek = useRef<number | null>(null);
   const [query, setQuery] = useState("");
   const [matches, setMatches] = useState<SearchMatch[] | null>(null);
-  const [searchError, setSearchError] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [tab, setTab] = useState<"search" | "transcript" | "clips">("search");
   const [clipRange, setClipRange] = useState<ClipRange>([0, 0]);
@@ -61,19 +70,29 @@ export default function VideoDetail() {
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState("");
   const [saving, setSaving] = useState(false);
+  const [transcriptFilter, setTranscriptFilter] = useState("");
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const {
     data: video,
     isError,
+    error: videoError,
     refetch,
   } = useQuery({
     queryKey: ["video", id],
     queryFn: () => getVideo(id),
+    retry: (count, e) => errorStatus(e) !== 404 && count < 1,
     refetchInterval: (q) =>
-      ["processing", "queued", "uploaded"].includes(q.state.data?.status ?? "")
+      ["processing", "queued", "uploaded"].includes(q.state.data?.status ?? "") ||
+      q.state.data?.transcript_status === "processing"
         ? 4000
         : false,
   });
+  // A retried transcript lands after the video itself is ready; pick it up when it does.
+  useEffect(() => {
+    if (video?.has_transcript)
+      qc.invalidateQueries({ queryKey: ["transcript", id] });
+  }, [video?.has_transcript, id, qc]);
   const ready = video?.status === "completed";
   const processing = ["uploaded", "queued", "processing"].includes(
     video?.status ?? "",
@@ -100,6 +119,20 @@ export default function VideoDetail() {
     queryFn: () => getTranscript(id),
     enabled: !!video?.has_transcript,
   });
+  const { reprocess } = useVideoMutations({ id, title: video?.title ?? "" });
+  const transcriptRetry = useMutation({
+    mutationFn: () => retryTranscript(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["video", id] });
+      toast.success("Transcription restarted. Check back in a few minutes.");
+    },
+    onError: (e) =>
+      toast.error(apiErrorMessage(e, "Couldn’t restart transcription.")),
+  });
+  const filterText = transcriptFilter.trim().toLowerCase();
+  const transcriptSegments = (transcript?.segments ?? []).filter(
+    (s) => !filterText || s.text.toLowerCase().includes(filterText),
+  );
   const frames = frameData?.frames ?? [];
   const fullDuration = duration || video?.duration_seconds || 0;
   const clipDuration =
@@ -240,13 +273,17 @@ export default function VideoDetail() {
   }, [fullDuration, canPlay]);
   const runSearch = async () => {
     if (!query.trim() || isSearching || !ready) return;
-    setSearchError(false);
+    setSearchError(null);
     setIsSearching(true);
     setMatches(null);
     try {
       setMatches(await search(query.trim(), id));
-    } catch {
-      setSearchError(true);
+    } catch (e) {
+      setSearchError(
+        errorStatus(e) === 429
+          ? "You’ve used all your searches for this month."
+          : "Search is temporarily unavailable. Please try again.",
+      );
     } finally {
       setIsSearching(false);
     }
@@ -269,10 +306,16 @@ export default function VideoDetail() {
     return (
       <div className="p-8">
         <div className="error-state" role="alert">
-          This video couldn’t be loaded.{" "}
-          <button className="underline" onClick={() => refetch()}>
-            Try again
-          </button>
+          {errorStatus(videoError) === 404 ? (
+            "This video doesn’t exist anymore. It may have been deleted."
+          ) : (
+            <>
+              This video couldn’t be loaded.{" "}
+              <button className="underline" onClick={() => refetch()}>
+                Try again
+              </button>
+            </>
+          )}
         </div>
         <Link to="/" className="inline-block mt-5 text-primary">
           Back to library
@@ -344,6 +387,12 @@ export default function VideoDetail() {
         </div>
         <div className="editor-export-actions">
           {video && <StatusBadge status={video.status} />}
+          {video && (
+            <VideoActionsMenu
+              video={video}
+              onDeleted={() => navigate("/", { replace: true })}
+            />
+          )}
           <Button
             className="studio-button editor-export-trigger"
             disabled={!ready || !clipDuration}
@@ -568,8 +617,25 @@ export default function VideoDetail() {
             </div>
           </div>
           {video?.status === "failed" && (
-            <div className="editor-status text-destructive" role="status">
-              Processing couldn’t finish. Your original video is still available.
+            <div className="editor-status editor-failed" role="status">
+              <span>
+                Processing couldn’t finish. Your original video is still
+                available, and retrying usually fixes it.
+              </span>
+              <Button
+                size="sm"
+                variant="outline"
+                className="studio-button"
+                disabled={reprocess.isPending}
+                onClick={() => reprocess.mutate()}
+              >
+                {reprocess.isPending ? (
+                  <Loader2 className="animate-spin" />
+                ) : (
+                  <RotateCcw />
+                )}
+                Retry processing
+              </Button>
             </div>
           )}
           <section className="timeline-panel" aria-label="Timeline">
@@ -772,7 +838,7 @@ export default function VideoDetail() {
               )}
               {searchError && (
                 <p role="alert" className="text-destructive text-xs mt-5">
-                  Search is temporarily unavailable. Please try again.
+                  {searchError}
                 </p>
               )}
               {isSearching && (
@@ -866,6 +932,23 @@ export default function VideoDetail() {
                   </button>
                 ) : null}
               </div>
+              {transcript?.segments.length ? (
+                <label className="inspector-search transcript-find">
+                  <SearchIcon size={13} aria-hidden="true" />
+                  <input
+                    type="search"
+                    aria-label="Find in transcript"
+                    placeholder="Find a word or phrase…"
+                    value={transcriptFilter}
+                    onChange={(e) => setTranscriptFilter(e.target.value)}
+                  />
+                  {filterText && (
+                    <span className="transcript-find-count" aria-live="polite">
+                      {transcriptSegments.length} found
+                    </span>
+                  )}
+                </label>
+              ) : null}
               {transcriptLoading ? (
                 <p className="inspector-hint" role="status">
                   Loading transcript…
@@ -882,7 +965,12 @@ export default function VideoDetail() {
                 </p>
               ) : transcript?.segments.length ? (
                 <div className="transcript-list">
-                  {transcript.segments.map((s) => (
+                  {!transcriptSegments.length && (
+                    <p className="inspector-hint">
+                      Nothing in the transcript matches “{transcriptFilter.trim()}”.
+                    </p>
+                  )}
+                  {transcriptSegments.map((s) => (
                     <button
                       className={cn(
                         "transcript-segment",
@@ -894,7 +982,9 @@ export default function VideoDetail() {
                       onClick={() => seekTo(s.start_seconds, true)}
                     >
                       <span>{formatTimestamp(s.start_seconds)}</span>
-                      <p>{s.text}</p>
+                      <p>
+                        <Highlight text={s.text} term={filterText} />
+                      </p>
                     </button>
                   ))}
                 </div>
@@ -904,15 +994,35 @@ export default function VideoDetail() {
                     <FileText size={22} strokeWidth={1.2} />
                   </div>
                   <h3>
-                    {ready
-                      ? "No transcript available"
-                      : "Listening for the details"}
+                    {video?.transcript_status === "failed"
+                      ? "Transcription didn’t finish"
+                      : ready
+                        ? "No transcript available"
+                        : "Listening for the details"}
                   </h3>
                   <p>
-                    {ready
-                      ? "This video has no transcript to display."
-                      : "Spoken audio will appear here after processing."}
+                    {video?.transcript_status === "failed"
+                      ? "Something went wrong while transcribing the audio. Your video and visual search still work."
+                      : ready
+                        ? "This video has no spoken audio to transcribe."
+                        : "Spoken audio will appear here after processing."}
                   </p>
+                  {video?.transcript_status === "failed" && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="studio-button mt-5"
+                      disabled={transcriptRetry.isPending}
+                      onClick={() => transcriptRetry.mutate()}
+                    >
+                      {transcriptRetry.isPending ? (
+                        <Loader2 className="animate-spin" />
+                      ) : (
+                        <RotateCcw />
+                      )}
+                      Retry transcription
+                    </Button>
+                  )}
                 </div>
               )}
             </div>
@@ -943,4 +1053,17 @@ export default function VideoDetail() {
       </div>
     </div>
   );
+}
+
+function Highlight({ text, term }: { text: string; term: string }) {
+  if (!term) return <>{text}</>;
+  const lower = text.toLowerCase();
+  const parts: ReactNode[] = [];
+  let from = 0;
+  for (let at = lower.indexOf(term); at !== -1; at = lower.indexOf(term, from)) {
+    parts.push(text.slice(from, at), <mark key={at}>{text.slice(at, at + term.length)}</mark>);
+    from = at + term.length;
+  }
+  parts.push(text.slice(from));
+  return <>{parts}</>;
 }

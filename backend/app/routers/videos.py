@@ -58,13 +58,14 @@ async def list_videos(
     limit: int = Query(20, ge=1, le=100),
     sort: str = Query("created_at"),
     order: str = Query("desc"),
+    q: str | None = Query(None, max_length=200),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     service = VideoService(db)
     videos, total = await service.list_videos(
         user.user_id, folder_id=folder_id, status=status, source_type=source_type,
-        page=page, limit=limit, sort=sort, order=order,
+        page=page, limit=limit, sort=sort, order=order, q=q,
     )
     return ApiResponse(data=VideoListResponse(
         videos=[_to_video_response(v) for v in videos],
@@ -137,6 +138,11 @@ async def update_video(
     video = await service.get_video(video_id, user.user_id)
 
     update_fields = data.model_dump(exclude_unset=True)
+    if update_fields.get("folder_id") is not None:
+        from fastapi import HTTPException
+        from app.repositories.folder_repo import FolderRepository
+        if not await FolderRepository(db).get_by_id(update_fields["folder_id"], user.user_id):
+            raise HTTPException(status_code=404, detail="Folder not found")
     if update_fields:
         await service.repo.update(video, **update_fields)
 

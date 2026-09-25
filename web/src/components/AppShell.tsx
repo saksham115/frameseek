@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
+  AlertTriangle,
   ArrowUpRight,
   ChevronRight,
   Film,
@@ -11,12 +12,15 @@ import {
   Search,
   Settings2,
   Upload,
+  UploadCloud,
   X,
 } from "lucide-react";
 import LogoIcon from "@/components/LogoIcon";
 import ThemeToggle from "@/components/ThemeToggle";
 import { useAuth } from "@/store/auth";
 import { formatBytes } from "@/lib/format";
+import { SEARCH_INPUT_ID, setAppNavigator } from "@/lib/navigation";
+import { isActiveUpload, useUploads } from "@/store/uploads";
 import { cn } from "@/lib/utils";
 
 const NAV = [
@@ -42,6 +46,16 @@ export default function AppShell() {
         "/settings": "Settings",
         "/upgrade": "Plans",
       }[location.pathname] ?? "Workspace");
+  const uploads = useUploads((s) => s.items);
+  const activeUploads = uploads.filter(isActiveUpload);
+  const uploadBytes = activeUploads.reduce((n, i) => n + i.file.size, 0);
+  const uploadPercent = uploadBytes
+    ? Math.round(
+        activeUploads.reduce((n, i) => n + (i.file.size * i.progress) / 100, 0) /
+          uploadBytes *
+          100,
+      )
+    : 0;
   const storagePercent = user?.storage_limit_bytes
     ? Math.min(100, (user.storage_used_bytes / user.storage_limit_bytes) * 100)
     : 0;
@@ -97,10 +111,32 @@ export default function AppShell() {
     document.title = `${pageName} — FrameSeek`;
   }, [location.pathname, pageName]);
   useEffect(() => {
+    setAppNavigator(navigate);
+    return () => setAppNavigator(null);
+  }, [navigate]);
+  // Closing or reloading the tab kills in-flight uploads; ask first.
+  const uploading = activeUploads.length > 0;
+  useEffect(() => {
+    if (!uploading) return;
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [uploading]);
+  const openSearch = () => {
+    const input = document.getElementById(SEARCH_INPUT_ID) as HTMLInputElement | null;
+    if (input) {
+      input.focus();
+      input.select();
+    } else navigate("/search");
+  };
+  useEffect(() => {
     const keydown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
-        navigate("/search");
+        openSearch();
       }
       if (e.key === "Escape") setMenuOpen(false);
     };
@@ -181,12 +217,25 @@ export default function AppShell() {
         <div className="sidebar-bottom">
           <NavLink
             to="/settings"
-            className="storage-widget"
-            aria-label="Workspace storage settings"
+            className={cn(
+              "storage-widget",
+              storagePercent >= 85 && "is-warning",
+              storagePercent >= 99 && "is-full",
+            )}
+            aria-label={`Workspace storage settings, ${Math.round(storagePercent)}% used`}
           >
             <div className="flex justify-between items-center">
               <span>
-                <HardDrive size={13} /> Workspace storage
+                {storagePercent >= 85 ? (
+                  <AlertTriangle size={13} />
+                ) : (
+                  <HardDrive size={13} />
+                )}{" "}
+                {storagePercent >= 99
+                  ? "Storage full"
+                  : storagePercent >= 85
+                    ? "Storage almost full"
+                    : "Workspace storage"}
               </span>
               <ArrowUpRight size={13} />
             </div>
@@ -245,9 +294,25 @@ export default function AppShell() {
             </div>
           </div>
           <div className="flex items-center gap-3">
+            {uploading && location.pathname !== "/upload" && (
+              <NavLink
+                to="/upload"
+                className="topbar-uploads"
+                aria-label={`${activeUploads.length} uploads in progress, ${uploadPercent}% done`}
+              >
+                <UploadCloud size={14} />
+                <span>
+                  Uploading {activeUploads.length > 1 ? `${activeUploads.length} · ` : ""}
+                  {uploadPercent}%
+                </span>
+                <span className="topbar-uploads-bar" aria-hidden="true">
+                  <span style={{ width: `${uploadPercent}%` }} />
+                </span>
+              </NavLink>
+            )}
             <button
               className="topbar-search"
-              onClick={() => navigate("/search")}
+              onClick={openSearch}
               aria-label="Search your videos"
             >
               <Search size={15} />

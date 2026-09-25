@@ -30,6 +30,7 @@ export interface Video {
   frame_count?: number;
   has_transcript?: boolean;
   transcript_status?: string;
+  folder_id?: string | null;
 }
 
 export interface SearchMatch {
@@ -86,6 +87,7 @@ interface RawVideo {
   frame_count?: number;
   has_transcript?: boolean;
   transcript_status?: string;
+  folder_id?: string | null;
 }
 
 const STATUS_MAP: Record<string, VideoStatus> = {
@@ -116,5 +118,6 @@ export function mapVideo(v: RawVideo): Video {
     frame_count: v.frame_count,
     has_transcript: v.has_transcript,
     transcript_status: v.transcript_status,
+    folder_id: v.folder_id ?? null,
   };
 }

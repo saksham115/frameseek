@@ -105,7 +105,11 @@ class SearchService:
         )
 
     async def get_quota(self, user_id: UUID) -> SearchQuota:
-        result = await self.db.execute(select(User).where(User.user_id == user_id))
+        # populate_existing: _reserve_search bumps the counter with a raw UPDATE, which the
+        # session's cached User doesn't see; without it the quota reads one search behind.
+        result = await self.db.execute(
+            select(User).where(User.user_id == user_id).execution_options(populate_existing=True)
+        )
         user = result.scalar_one_or_none()
         if not user:
             return SearchQuota(used=0, limit=20, remaining=20)

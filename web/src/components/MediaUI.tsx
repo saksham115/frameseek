@@ -33,20 +33,39 @@ export function MediaThumbnail({
   alt?: string;
   className?: string;
 }) {
+  // Signed URLs change on every poll, and a thumbnail may not exist yet while a video
+  // processes. Keep the placeholder underneath until an image actually loads so neither
+  // case flashes a broken image.
+  const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
-  useEffect(() => setFailed(false), [src]);
-  return src && !failed ? (
-    <img
-      src={src}
-      alt={alt}
-      loading="lazy"
-      className={cn("media-image", className)}
-      onError={() => setFailed(true)}
-    />
-  ) : (
-    <div className={cn("media-placeholder", className)}>
-      <Film size={25} strokeWidth={1} />
-      <span>FRAMESEEK</span>
+  const path = src?.split("?")[0];
+  useEffect(() => {
+    setFailed(false);
+  }, [src]);
+  useEffect(() => {
+    setLoaded(false);
+  }, [path]);
+  return (
+    <div className={cn("media-thumb", className)}>
+      {!loaded && (
+        <div className="media-placeholder">
+          <Film size={25} strokeWidth={1} />
+          <span>FRAMESEEK</span>
+        </div>
+      )}
+      {src && !failed && (
+        <img
+          src={src}
+          alt={alt}
+          loading="lazy"
+          className={cn("media-image", !loaded && "is-loading")}
+          onLoad={() => setLoaded(true)}
+          onError={() => {
+            setFailed(true);
+            setLoaded(false);
+          }}
+        />
+      )}
     </div>
   );
 }

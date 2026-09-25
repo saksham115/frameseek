@@ -72,6 +72,13 @@ class TestSearch:
         await db_session.refresh(test_user["user"])
         assert test_user["user"].monthly_search_count >= 1
 
+    async def test_search_response_quota_counts_this_search(self, client, test_user):
+        first = (await client.post(URL, json={"query": "one"}, headers=test_user["headers"])).json()["data"]
+        second = (await client.post(URL, json={"query": "two"}, headers=test_user["headers"])).json()["data"]
+        assert first["quota"]["used"] == 1
+        assert second["quota"]["used"] == 2
+        assert second["quota"]["remaining"] == second["quota"]["limit"] - 2
+
     async def test_search_records_history(self, client, db_session, test_user):
         await client.post(URL, json={"query": "recorded query"}, headers=test_user["headers"])
 
