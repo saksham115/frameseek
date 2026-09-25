@@ -66,6 +66,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
       - run: bunx tsc --noEmit -p tsconfig.app.json
+      - run: bun test
       - run: bun run build
 
   build-and-deploy:

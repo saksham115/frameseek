@@ -1656,9 +1656,9 @@ kbd {
 .inspector-tabs {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 16px;
   border-bottom: 1px solid hsl(var(--border));
-  padding: 0 21px;
+  padding: 0 16px;
   height: 54px;
   flex-shrink: 0;
 }

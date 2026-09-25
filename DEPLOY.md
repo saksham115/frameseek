@@ -229,3 +229,11 @@ OIDC identity and repository variables `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`,
 `AZURE_SUBSCRIPTION_ID`, `ACR_NAME`, `RESOURCE_GROUP`, `API_APP`, `WORKER_JOB`,
 `WEB_APP`, and `MIGRATION_JOB`. It waits for successful migrations before rollout.
 OIDC setup is separate from this initial CLI deployment.
+
+Clip-export release checks: open a processed video, choose **Export clip**, set a
+range, confirm selection preview stops at the out point, export, and download MP4.
+Verify the saved clip survives a refresh and deletion restores storage usage.
+`backend/tests/test_clips.py` covers ownership, invalid ranges, quota enforcement,
+failed-upload rollback and download filenames. `cd web && bun test` checks timecode
+parsing and range boundaries. Export requests render server-side and may take up to
+90 seconds; timeout errors preserve the UI selection for retry with a shorter range.

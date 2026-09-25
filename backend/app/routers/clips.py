@@ -1,8 +1,9 @@
 import math
+import re
 from pathlib import Path
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -16,6 +17,25 @@ from app.utils.gcs_client import GCSClient
 from app.utils.url_helpers import resolve_storage_url
 
 router = APIRouter()
+
+
+@router.get("/{clip_id}/download-url")
+async def download_clip(
+    clip_id: UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    clip, _ = await ClipService(db).get_clip(clip_id, user.user_id)
+    if not clip.gcs_path or not GCSClient.is_enabled():
+        raise HTTPException(status_code=409, detail="This clip is not available for download.")
+    # A signed Content-Disposition makes cross-origin links download correctly.
+    # Strip unsafe filename characters, including CR/LF and quotes.
+    stem = re.sub(r"[^A-Za-z0-9._ -]+", "_", clip.title).strip(" .")[:120] or "clip"
+    filename = f"{stem}.mp4"
+    url = GCSClient.get().generate_signed_url(
+        clip.gcs_path, content_disposition=f'attachment; filename="{filename}"',
+    )
+    return ApiResponse(data={"download_url": url, "filename": filename})
 
 
 def _to_clip_response(clip, video_title: str | None = None) -> ClipResponse:

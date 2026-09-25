@@ -1,5 +1,5 @@
 import asyncio
-import os
+import logging
 import shutil
 import subprocess
 import tempfile
@@ -18,7 +18,10 @@ from app.utils.gcs_client import GCSClient
 
 
 MAX_CLIP_DURATION = 120  # seconds
-FFMPEG_TIMEOUT = 30  # seconds
+FFMPEG_TIMEOUT = 90  # seconds
+
+
+logger = logging.getLogger(__name__)
 
 
 class ClipService:
@@ -56,93 +59,65 @@ class ClipService:
             source_frame_id=source_frame_id,
         )
 
-        # Resolve video source — download from GCS if local file is gone
-        video_path = video.file_path
-        tmp_download_dir = None
-        local_missing = not video_path or not Path(video_path).exists()
-        if local_missing and GCSClient.is_enabled() and video.gcs_path:
-            tmp_download_dir = tempfile.mkdtemp()
-            ext = Path(video.file_path).suffix if video.file_path else ".mp4"
-            video_path = os.path.join(tmp_download_dir, f"source_video{ext}")
-            GCSClient.get().download_file(video.gcs_path, video_path)
-        elif local_missing:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video file not available")
-
-        # Prepare output path
-        clip_dir = Path(settings.STORAGE_BASE_PATH) / "clips" / str(clip.clip_id)
-        clip_dir.mkdir(parents=True, exist_ok=True)
-        output_path = clip_dir / "clip.mp4"
-
-        # Run ffmpeg to extract clip
+        # Rendering stays in scratch storage; the exported object is durable in Blob.
+        uploaded_path = None
         try:
-            cmd = [
-                "ffmpeg", "-y",
-                "-ss", str(start_time),
-                "-i", video_path,
-                "-t", str(duration),
-                "-c:v", "libx264", "-preset", "ultrafast",
-                "-c:a", "aac",
-                str(output_path),
-            ]
-            await asyncio.to_thread(
-                subprocess.run, cmd, capture_output=True, timeout=FFMPEG_TIMEOUT, check=True
-            )
-        except Exception:
-            # Cleanup on failure
-            shutil.rmtree(clip_dir, ignore_errors=True)
-            if tmp_download_dir:
-                shutil.rmtree(tmp_download_dir, ignore_errors=True)
-            await self.repo.delete(clip)
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to generate clip")
-        finally:
-            # Clean up downloaded source video
-            if tmp_download_dir:
-                shutil.rmtree(tmp_download_dir, ignore_errors=True)
+            with tempfile.TemporaryDirectory(prefix="frameseek-clip-") as scratch:
+                workdir = Path(scratch)
+                video_path = video.file_path
+                if not video_path or not Path(video_path).exists():
+                    if not GCSClient.is_enabled() or not video.gcs_path:
+                        raise HTTPException(status_code=404, detail="Video file not available")
+                    video_path = str(workdir / ("source" + (Path(video.gcs_path).suffix or ".mp4")))
+                    await asyncio.to_thread(GCSClient.get().download_file, video.gcs_path, video_path)
 
-        # Generate thumbnail from middle of clip
-        thumb_path = clip_dir / "thumbnail.jpg"
-        try:
-            thumb_cmd = [
-                "ffmpeg", "-y",
-                "-ss", str(duration / 2),
-                "-i", str(output_path),
-                "-frames:v", "1",
-                "-q:v", "3",
-                str(thumb_path),
-            ]
-            await asyncio.to_thread(
-                subprocess.run, thumb_cmd, capture_output=True, timeout=10, check=True
-            )
-        except Exception:
-            pass  # Thumbnail is optional, don't fail clip creation
+                output_path = workdir / "clip.mp4"
+                cmd = [
+                    "ffmpeg", "-y", "-ss", str(start_time), "-i", video_path,
+                    "-t", str(duration), "-map", "0:v:0", "-map", "0:a:0?",
+                    "-c:v", "libx264", "-preset", "ultrafast", "-threads", "2",
+                    "-vf", "pad=ceil(iw/2)*2:ceil(ih/2)*2", "-pix_fmt", "yuv420p",
+                    "-c:a", "aac", "-movflags", "+faststart", str(output_path),
+                ]
+                await asyncio.to_thread(subprocess.run, cmd, capture_output=True, timeout=FFMPEG_TIMEOUT, check=True)
+                file_size = output_path.stat().st_size
+                if not await self.storage_service.try_reserve_storage(user_id, file_size):
+                    raise HTTPException(status_code=403, detail="Not enough storage for this clip. Delete a saved clip or video and try again.")
 
-        # Upload to GCS if enabled
-        gcs_path = None
-        if GCSClient.is_enabled():
-            gcs = GCSClient.get()
-            gcs_path = f"clips/{clip.clip_id}/clip.mp4"
-            gcs.upload_file(output_path, gcs_path, content_type="video/mp4")
-            if thumb_path.exists():
-                gcs.upload_file(thumb_path, f"clips/{clip.clip_id}/thumbnail.jpg", content_type="image/jpeg")
+                thumb_path = workdir / "thumbnail.jpg"
+                try:
+                    await asyncio.to_thread(subprocess.run, [
+                        "ffmpeg", "-y", "-ss", str(duration / 2), "-i", str(output_path),
+                        "-frames:v", "1", "-q:v", "3", str(thumb_path),
+                    ], capture_output=True, timeout=10, check=True)
+                except (subprocess.SubprocessError, OSError):
+                    logger.info("Optional thumbnail failed for clip %s", clip.clip_id)
 
-        # Get file size before potential cleanup
-        file_size = output_path.stat().st_size
-
-        # Update clip with file info
-        await self.repo.update(
-            clip,
-            file_path=str(output_path),
-            file_size_bytes=file_size,
-            gcs_path=gcs_path,
-        )
-
-        # Clean up local clip files when GCS is the source of truth
-        if GCSClient.is_enabled() and gcs_path:
-            shutil.rmtree(clip_dir, ignore_errors=True)
-            await self.repo.update(clip, file_path=None)
-
-        # Update storage quota
-        await self.storage_service.update_storage_used(user_id, file_size)
+                if GCSClient.is_enabled():
+                    storage = GCSClient.get()
+                    uploaded_path = f"clips/{clip.clip_id}/clip.mp4"
+                    await asyncio.to_thread(storage.upload_file, output_path, uploaded_path, content_type="video/mp4")
+                    if thumb_path.exists():
+                        await asyncio.to_thread(storage.upload_file, thumb_path, f"clips/{clip.clip_id}/thumbnail.jpg", content_type="image/jpeg")
+                    await self.repo.update(clip, file_path=None, file_size_bytes=file_size, gcs_path=uploaded_path)
+                else:
+                    # Preserve compatibility for development without object storage.
+                    clip_dir = settings.storage_path / "clips" / str(clip.clip_id)
+                    await asyncio.to_thread(shutil.copytree, workdir, clip_dir, ignore=shutil.ignore_patterns("source*"))
+                    await self.repo.update(clip, file_path=str(clip_dir / "clip.mp4"), file_size_bytes=file_size)
+        except Exception as exc:
+            if uploaded_path:
+                try:
+                    await asyncio.to_thread(GCSClient.get().delete_prefix, f"clips/{clip.clip_id}/")
+                except Exception:
+                    logger.exception("Could not clean up failed clip upload %s", clip.clip_id)
+            # The request transaction rolls back the clip and any quota reservation.
+            if isinstance(exc, HTTPException):
+                raise
+            logger.exception("Clip rendering failed for %s", clip.clip_id)
+            if isinstance(exc, subprocess.TimeoutExpired):
+                raise HTTPException(status_code=504, detail="This clip took too long to render. Try a shorter selection.") from exc
+            raise HTTPException(status_code=503, detail="Could not export this clip. Your selection is unchanged; please try again.") from exc
 
         return clip, video.title
 
@@ -173,7 +148,7 @@ class ClipService:
 
         # Delete from GCS
         if GCSClient.is_enabled() and clip.gcs_path:
-            GCSClient.get().delete_prefix(f"clips/{clip_id}/")
+            await asyncio.to_thread(GCSClient.get().delete_prefix, f"clips/{clip_id}/")
 
         # Update storage quota
         if clip.file_size_bytes:

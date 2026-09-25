@@ -17,6 +17,12 @@ controls, and clickable transcript segments. Dark and light themes share the sam
 layout, with a keyboard-accessible navigation drawer on smaller screens. Use
 Cmd/Ctrl+K for search and Space/arrow keys for playback in the video workspace.
 
+Choose **Export clip** in a processed video's workspace to trim with timeline handles
+or precise timecodes, preview the selection, and render an MP4 (up to two minutes).
+The Clips panel keeps saved exports with preview, download, and delete actions.
+Exports count toward storage; deleting a clip restores its quota. Downloads use fresh,
+owner-authorized Blob URLs with an attachment filename.
+
 Local validation covers Google sign-in, session persistence, direct uploads,
 Azure transcription and visual search, video playback, and the backend test suite.
 Payments are disabled by default with `PAYMENTS_ENABLED=false`; billing controls

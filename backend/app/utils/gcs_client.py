@@ -99,7 +99,7 @@ class GCSClient:
             self._delegation_expiry = expiry
         return self._delegation_key
 
-    def _sign(self, container: str, blob: str, permission: BlobSasPermissions, expiry_minutes: int) -> str:
+    def _sign(self, container: str, blob: str, permission: BlobSasPermissions, expiry_minutes: int, content_disposition: str | None = None) -> str:
         expiry = datetime.now(timezone.utc) + timedelta(minutes=expiry_minutes)
         kwargs = dict(
             account_name=self._svc.account_name,
@@ -112,6 +112,8 @@ class GCSClient:
             kwargs["account_key"] = self._account_key
         else:
             kwargs["user_delegation_key"] = self._get_user_delegation_key()
+        if content_disposition:
+            kwargs["content_disposition"] = content_disposition
         token = generate_blob_sas(**kwargs)
         return f"{self._svc.url.rstrip('/')}/{container}/{blob}?{token}"
 
@@ -152,11 +154,12 @@ class GCSClient:
         container, blob = self._split(gcs_path)
         return self._svc.get_blob_client(container=container, blob=blob).get_blob_properties().size
 
-    def generate_signed_url(self, gcs_path: str, expiry_minutes: int | None = None) -> str:
+    def generate_signed_url(self, gcs_path: str, expiry_minutes: int | None = None, *, content_disposition: str | None = None) -> str:
         """Short-lived read (GET) SAS URL."""
         container, blob = self._split(gcs_path)
         return self._sign(
-            container, blob, BlobSasPermissions(read=True), expiry_minutes or settings.SAS_EXPIRY_MINUTES
+            container, blob, BlobSasPermissions(read=True), expiry_minutes or settings.SAS_EXPIRY_MINUTES,
+            content_disposition=content_disposition,
         )
 
     def generate_upload_sas(self, gcs_path: str, expiry_minutes: int | None = None) -> str:

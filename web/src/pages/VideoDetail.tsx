@@ -16,6 +16,7 @@ import {
   Pencil,
   Play,
   Search as SearchIcon,
+  Scissors,
   SkipBack,
   SkipForward,
   Volume2,
@@ -30,18 +31,26 @@ import { Button } from "@/components/ui/button";
 import { MediaThumbnail, StatusBadge } from "@/components/MediaUI";
 import { formatBytes, formatTimestamp } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import ClipTools, { ClipRangeSlider } from "@/components/ClipTools";
+import { formatClipTime, type ClipRange } from "@/lib/clip-time";
+import "@/clip-tools.css";
 
 export default function VideoDetail() {
   const { id = "" } = useParams();
   const [params] = useSearchParams();
   const videoRef = useRef<HTMLVideoElement>(null);
   const playerRef = useRef<HTMLDivElement>(null);
+  const inspectorRef = useRef<HTMLElement>(null);
   const pendingSeek = useRef<number | null>(null);
   const [query, setQuery] = useState("");
   const [matches, setMatches] = useState<SearchMatch[] | null>(null);
   const [searchError, setSearchError] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
-  const [tab, setTab] = useState<"search" | "transcript">("search");
+  const [tab, setTab] = useState<"search" | "transcript" | "clips">("search");
+  const [clipRange, setClipRange] = useState<ClipRange>([0, 0]);
+  const [previewingClip, setPreviewingClip] = useState(false);
+  const [exportingClip, setExportingClip] = useState(false);
+  const clipPreviewRef = useRef<ClipRange | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -88,9 +97,37 @@ export default function VideoDetail() {
   });
   const frames = frameData?.frames ?? [];
   const fullDuration = duration || video?.duration_seconds || 0;
+  const clipDuration =
+    Math.floor(
+      Math.min(fullDuration, video?.duration_seconds ?? fullDuration) * 100,
+    ) / 100;
   const initialTime = Math.max(0, Number(params.get("t")) || 0);
 
+  const stopClipPreview = () => {
+    clipPreviewRef.current = null;
+    setPreviewingClip(false);
+  };
+  const pausePlayer = () => {
+    videoRef.current?.pause();
+    stopClipPreview();
+  };
+  const changeClipRange = (range: ClipRange) => {
+    if (clipPreviewRef.current) pausePlayer();
+    setClipRange(range);
+  };
+  const openClips = () => {
+    if (tab !== "clips") pausePlayer();
+    if (clipRange[1] === 0 && clipDuration > 0) {
+      const start =
+        currentTime >= clipDuration - 0.1
+          ? Math.max(0, clipDuration - 10)
+          : Math.round(currentTime * 100) / 100;
+      setClipRange([start, Math.min(clipDuration, start + 10)]);
+    }
+    setTab("clips");
+  };
   const seekTo = (seconds: number, play = false) => {
+    stopClipPreview();
     const el = videoRef.current;
     if (!el) return;
     const target = Math.max(
@@ -105,6 +142,50 @@ export default function VideoDetail() {
     setCurrentTime(target);
     if (play) el.play().catch(() => undefined);
   };
+  const previewClip = (range: ClipRange) => {
+    seekTo(range[0]);
+    clipPreviewRef.current = range;
+    setPreviewingClip(true);
+    if (window.matchMedia("(max-width: 700px)").matches) {
+      playerRef.current?.scrollIntoView({
+        block: "center",
+        behavior: "smooth",
+      });
+    }
+    videoRef.current?.play().catch(() => {
+      stopClipPreview();
+      toast.error(
+        "Couldn’t preview this selection. Reload the video and try again.",
+      );
+    });
+  };
+  useEffect(() => {
+    if (!previewingClip) return;
+    let frame: number;
+    const tick = () => {
+      const el = videoRef.current,
+        selection = clipPreviewRef.current;
+      if (!el || !selection) return;
+      if (!el.seeking && el.currentTime >= selection[1]) {
+        el.currentTime = selection[1];
+        setCurrentTime(selection[1]);
+        pausePlayer();
+        return;
+      }
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [previewingClip]);
+  useEffect(() => {
+    if (tab !== "clips" && clipPreviewRef.current) pausePlayer();
+  }, [tab]);
+  useEffect(() => {
+    setClipRange([0, 0]);
+    stopClipPreview();
+    setDuration(0);
+    setMediaError(false);
+  }, [id]);
   const togglePlayback = () => {
     const el = videoRef.current;
     if (!el) return;
@@ -125,7 +206,7 @@ export default function VideoDetail() {
         e.ctrlKey ||
         e.metaKey ||
         target.closest(
-          "input, textarea, button, select, [contenteditable], [role=dialog]",
+          "input, textarea, button, select, video, [contenteditable], [role=dialog], [role=slider]",
         )
       )
         return;
@@ -187,7 +268,7 @@ export default function VideoDetail() {
       </div>
     );
   return (
-    <div className="editor-workspace">
+    <div className={cn("editor-workspace", tab === "clips" && "is-trimming")}>
       <div className="editor-heading">
         <div className="flex items-center gap-3 min-w-0">
           <Link to="/" className="icon-button" aria-label="Back to library">
@@ -249,7 +330,27 @@ export default function VideoDetail() {
             </p>
           </div>
         </div>
-        {video && <StatusBadge status={video.status} />}
+        <div className="editor-export-actions">
+          {video && <StatusBadge status={video.status} />}
+          <Button
+            className="studio-button editor-export-trigger"
+            disabled={!ready || !clipDuration}
+            onClick={() => {
+              openClips();
+              if (window.matchMedia("(max-width: 700px)").matches) {
+                requestAnimationFrame(() =>
+                  inspectorRef.current?.scrollIntoView({
+                    block: "start",
+                    behavior: "smooth",
+                  }),
+                );
+              }
+            }}
+            aria-pressed={tab === "clips"}
+          >
+            <Scissors size={14} /> Export clip
+          </Button>
+        </div>
       </div>
       <div className="editor-grid">
         <section
@@ -293,9 +394,21 @@ export default function VideoDetail() {
                   onTimeUpdate={(e) =>
                     setCurrentTime(e.currentTarget.currentTime)
                   }
-                  onPlay={() => setPlaying(true)}
-                  onPause={() => setPlaying(false)}
-                  onEnded={() => setPlaying(false)}
+                  onPlay={() => {
+                    // Only one preview should produce audio at a time.
+                    document
+                      .querySelector<HTMLVideoElement>(".clip-ready video")
+                      ?.pause();
+                    setPlaying(true);
+                  }}
+                  onPause={() => {
+                    setPlaying(false);
+                    stopClipPreview();
+                  }}
+                  onEnded={() => {
+                    setPlaying(false);
+                    stopClipPreview();
+                  }}
                   onError={() => setMediaError(true)}
                 />
               ) : (
@@ -425,7 +538,11 @@ export default function VideoDetail() {
               <span>
                 <Film size={12} /> FRAME NAVIGATOR
               </span>
-              <span>{video?.frame_count ?? 0} indexed frames</span>
+              <span>
+                {previewingClip
+                  ? `Previewing ${formatClipTime(clipRange[1] - clipRange[0])} selection`
+                  : `${video?.frame_count ?? 0} indexed frames`}
+              </span>
             </div>
             <div className="timeline-ruler">
               {[0, 0.2, 0.4, 0.6, 0.8, 1].map((f) => (
@@ -447,6 +564,14 @@ export default function VideoDetail() {
                 background: `linear-gradient(to right, hsl(var(--primary)) ${fullDuration ? (currentTime / fullDuration) * 100 : 0}%, hsl(var(--border)) 0%)`,
               }}
             />
+            {tab === "clips" && ready && clipDuration > 0 && (
+              <ClipRangeSlider
+                range={clipRange}
+                duration={clipDuration}
+                onChange={changeClipRange}
+                disabled={exportingClip}
+              />
+            )}
             {framesError ? (
               <p className="editor-status" role="alert">
                 Frames couldn’t be loaded.{" "}
@@ -485,7 +610,11 @@ export default function VideoDetail() {
               </div>
             )}
             <div className="timeline-footer">
-              <span>Click a frame to explore that moment</span>
+              <span>
+                {tab === "clips"
+                  ? "Drag the handles to set your in and out points"
+                  : "Click a frame to explore that moment"}
+              </span>
               {(frameData?.pagination.total_pages ?? 0) > 1 ? (
                 <div className="flex gap-2 items-center">
                   <button
@@ -534,7 +663,11 @@ export default function VideoDetail() {
             </span>
           </div>
         </section>
-        <aside className="editor-inspector" aria-label="Video insights">
+        <aside
+          ref={inspectorRef}
+          className="editor-inspector"
+          aria-label="Video tools"
+        >
           <div className="inspector-tabs">
             <button
               onClick={() => setTab("search")}
@@ -549,6 +682,13 @@ export default function VideoDetail() {
               aria-pressed={tab === "transcript"}
             >
               <FileText size={14} /> Transcript
+            </button>
+            <button
+              onClick={openClips}
+              className={cn(tab === "clips" && "active")}
+              aria-pressed={tab === "clips"}
+            >
+              <Scissors size={14} /> Clips
             </button>
           </div>
           {tab === "search" ? (
@@ -654,7 +794,7 @@ export default function VideoDetail() {
                 )
               )}
             </div>
-          ) : (
+          ) : tab === "transcript" ? (
             <div className="inspector-content">
               <div className="transcript-heading">
                 <div>
@@ -734,6 +874,23 @@ export default function VideoDetail() {
                 </div>
               )}
             </div>
+          ) : null}
+          {video && (
+            <ClipTools
+              key={id}
+              videoId={id}
+              title={video.title}
+              duration={clipDuration}
+              currentTime={currentTime}
+              range={clipRange}
+              onRangeChange={changeClipRange}
+              onPreview={previewClip}
+              onPause={pausePlayer}
+              previewing={previewingClip}
+              active={tab === "clips"}
+              ready={ready}
+              onBusyChange={setExportingClip}
+            />
           )}
           <div className="inspector-bottom">
             <span className="workspace-dot" />
