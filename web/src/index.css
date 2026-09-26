@@ -3355,3 +3355,82 @@ button.import-tile {
   width: 100%;
   color: inherit;
 }
+
+/* ---- Folder picker in the Import dialog ---- */
+.folder-select-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: auto;
+  min-width: 200px;
+  max-width: 280px;
+  height: 32px;
+  padding: 0 10px;
+  font-size: 11px;
+  color: hsl(var(--foreground));
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  border-radius: 6px;
+  transition: border-color 0.15s;
+}
+.folder-select-trigger:hover,
+.folder-select-trigger[data-state="open"] {
+  border-color: hsl(var(--primary) / 0.5);
+}
+.folder-select-trigger:focus,
+.folder-select-trigger:focus-visible {
+  outline: none;
+  box-shadow: none;
+  border-color: hsl(var(--primary) / 0.7);
+}
+.folder-select-trigger > span {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.folder-select-menu {
+  min-width: var(--radix-select-trigger-width);
+  max-height: 280px;
+}
+.folder-select-menu [role="option"] {
+  font-size: 11px;
+}
+
+/* ---- Library grid: as many cards as fit, at most 5 per row ---- */
+.media-grid.library-grid {
+  gap: 16px;
+  /* Each column is at least 140px, and never narrower than a fifth of the row,
+     so the grid tops out at five cards per row. */
+  grid-template-columns: repeat(
+    auto-fill,
+    minmax(max(140px, calc((100% - 4 * 16px) / 5 - 1px)), 1fr)
+  );
+}
+.library-grid .media-card-info {
+  padding: 11px 11px 10px;
+}
+.library-grid .media-card-title {
+  font-size: 10.5px;
+  margin-bottom: 9px;
+}
+.library-grid .media-card-meta {
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 8.5px;
+}
+.library-grid .card-processing {
+  font-size: 8.5px;
+  padding: 8px;
+}
+.library-grid .import-tile {
+  min-height: 0;
+}
+@media (max-width: 600px) {
+  .media-grid.library-grid {
+    gap: 12px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
