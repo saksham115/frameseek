@@ -263,7 +263,7 @@ export default function Library() {
           </button>
         </div>
       ) : isLoading ? (
-        <div className="media-grid">
+        <div className="media-grid library-grid">
           {[0, 1, 2].map((i) => (
             <div key={i} className="skeleton aspect-[4/3]" />
           ))}
@@ -323,7 +323,7 @@ export default function Library() {
           </div>
         </div>
       ) : (
-        <div className={view === "grid" ? "media-grid" : "media-list"}>
+        <div className={view === "grid" ? "media-grid library-grid" : "media-list"}>
           {videos.map((v) => (
             <VideoCard key={v.id} video={v} />
           ))}

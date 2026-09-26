@@ -5,6 +5,7 @@ import {
   ArrowUpRight,
   Check,
   FileVideo,
+  Folder as FolderIcon,
   LockKeyhole,
   RotateCcw,
   UploadCloud,
@@ -13,6 +14,13 @@ import {
 import { toast } from "sonner";
 import { listFolders } from "@/api/folders";
 import { Progress } from "@/components/ui/progress";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -31,6 +39,8 @@ import {
 } from "@/store/uploads";
 import { cn } from "@/lib/utils";
 
+// Radix Select items can't use "" as a value.
+const NO_FOLDER = "__none__";
 const MAX_BYTES = 500 * 1024 * 1024;
 
 const STATUS_LABEL: Record<UploadItem["status"], string> = {
@@ -107,20 +117,30 @@ export default function ImportDialog() {
         </DialogHeader>
         <div className="import-dialog-body">
           <div className="upload-options">
-            <label htmlFor="upload-folder">Save to</label>
-            <select
-              id="upload-folder"
-              className="studio-select"
-              value={folderId}
-              onChange={(e) => setFolderId(e.target.value)}
+            <span id="upload-folder-label">Save to</span>
+            {/* Radix Select, not a native <select>: the OS popup renders over the
+                control inside the dialog and clashes with the app's styling. */}
+            <Select
+              value={folderId || NO_FOLDER}
+              onValueChange={(v) => setFolderId(v === NO_FOLDER ? "" : v)}
             >
-              <option value="">Library (no folder)</option>
-              {folders?.map((f) => (
-                <option key={f.id} value={f.id}>
-                  {f.name}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger
+                id="upload-folder"
+                aria-labelledby="upload-folder-label"
+                className="folder-select-trigger"
+              >
+                <FolderIcon size={13} className="shrink-0 opacity-70" />
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="studio-menu folder-select-menu">
+                <SelectItem value={NO_FOLDER}>Library (no folder)</SelectItem>
+                {folders?.map((f) => (
+                  <SelectItem key={f.id} value={f.id}>
+                    {f.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <span className="upload-space">
               {formatBytes(remainingBytes)} of space left
             </span>
