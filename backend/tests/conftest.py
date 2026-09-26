@@ -52,7 +52,7 @@ async def db_session():
         await conn.execute(
             text(
                 "TRUNCATE TABLE "
-                "search_history, user_analytics, frames, jobs, videos, folders, users "
+                "user_feedback, search_history, user_analytics, frames, jobs, videos, folders, users "
                 "CASCADE"
             )
         )
@@ -161,8 +161,12 @@ async def _create_user_in_db(
     *,
     email: str = "test@example.com",
     name: str = "Test User",
+    tos_accepted: bool = True,
 ) -> dict:
-    user = User(email=email, name=name, google_id=f"g-{uuid.uuid4().hex}")
+    user = User(
+        email=email, name=name, google_id=f"g-{uuid.uuid4().hex}",
+        tos_accepted_at=datetime.now(timezone.utc) if tos_accepted else None,
+    )
     session.add(user)
     await session.flush()
     await session.commit()
@@ -181,6 +185,12 @@ async def test_user(db_session: AsyncSession) -> dict:
 @pytest.fixture
 async def second_user(db_session: AsyncSession) -> dict:
     return await _create_user_in_db(db_session, email="bob@test.com", name="Bob")
+
+
+@pytest.fixture
+async def new_user(db_session: AsyncSession) -> dict:
+    """Signed in for the first time: hasn't accepted the Terms and Privacy Policy yet."""
+    return await _create_user_in_db(db_session, email="carol@test.com", name="Carol", tos_accepted=False)
 
 
 # ---------------------------------------------------------------------------

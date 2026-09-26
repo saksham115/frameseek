@@ -96,6 +96,23 @@ class FrameListResponse(BaseModel):
     pagination: Pagination
 
 
+class ShotResponse(BaseModel):
+    shot_index: int
+    start_seconds: float
+    end_seconds: float
+    frame_count: int
+    # Representative (middle) frame of the shot.
+    frame_id: UUID
+    timestamp_seconds: float
+    frame_url: str | None = None
+    thumbnail_url: str | None = None
+
+
+class ShotListResponse(BaseModel):
+    shots: list[ShotResponse]
+    similarity_threshold: float
+
+
 class TranscriptSegmentResponse(BaseModel):
     segment_id: UUID
     segment_index: int

@@ -11,9 +11,34 @@ from app.models.video import Video
 from app.repositories.vector_db import vector_db
 from app.schemas.search import SearchQuota, SearchRequest, SearchResponse, SearchResultItem
 from app.services.embedding_service import EmbeddingService, EmbeddingUnavailableError
+from app.services.shot_service import Shot, ShotService, shot_at
 
 from app.utils.formatting import format_duration
 from app.utils.gcs_client import GCSClient
+
+
+_SHOT_OVERFETCH = 3
+
+
+def collapse_into_shots(
+    results: list[SearchResultItem], shots_by_video: dict[str, list[Shot]]
+) -> list[SearchResultItem]:
+    """Keep the best-scoring hit per shot (results arrive best-first) and annotate it with
+    the shot's span and how many of its frames matched."""
+    kept: dict[tuple[str, object], SearchResultItem] = {}
+    for item in results:
+        shot = shot_at(shots_by_video.get(str(item.video_id), []), item.timestamp_seconds)
+        key = (str(item.video_id), shot.index if shot else f"frame:{item.frame_id}")
+        if key in kept:
+            kept[key].match_count += 1
+            continue
+        if shot:
+            item.shot_index = shot.index
+            item.shot_start_seconds = shot.start_seconds
+            item.shot_end_seconds = shot.end_seconds
+            item.shot_frame_count = shot.frame_count
+        kept[key] = item
+    return list(kept.values())
 
 
 class SearchService:
@@ -44,7 +69,9 @@ class SearchService:
         raw_results = vector_db.search(
             user_id=str(user_id),
             query_vector=query_vector,
-            top_k=request.top_k,
+            # Hits in the same shot collapse into one result, so over-fetch to still
+            # return up to top_k distinct shots.
+            top_k=min(request.top_k * _SHOT_OVERFETCH, 150),
             video_ids=video_id_strs,
             min_score=request.min_score,
             source_type_filter="local",
@@ -53,15 +80,18 @@ class SearchService:
         # Enrich results with video titles and short-lived signed URLs (Blob SAS only).
         # Indexed payloads retain the original title when a video is renamed.
         titles = {}
+        durations: dict[str, float | None] = {}
         if raw_results:
             rows = await self.db.execute(
-                select(Video.video_id, Video.title).where(
+                select(Video.video_id, Video.title, Video.duration_seconds).where(
                     Video.user_id == user_id,
                     Video.deleted_at.is_(None),
                     Video.video_id.in_([UUID(r.video_id) for r in raw_results]),
                 )
             )
-            titles = {str(video_id): title for video_id, title in rows}
+            for video_id, title, duration in rows:
+                titles[str(video_id)] = title
+                durations[str(video_id)] = float(duration) if duration is not None else None
         gcs_enabled = GCSClient.is_enabled()
         results: list[SearchResultItem] = []
         for r in raw_results:
@@ -85,8 +115,8 @@ class SearchService:
                 thumbnail_url=thumbnail_url,
             ))
 
-        # Trim to top_k
-        results = results[:request.top_k]
+        shots = await ShotService(self.db).shots_for_videos(user_id, list(durations), durations)
+        results = collapse_into_shots(results, shots)[:request.top_k]
 
         search_time_ms = int((time.time() - start_time) * 1000)
 

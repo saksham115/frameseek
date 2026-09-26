@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_active_user
 from app.models.frame import Frame
 from app.models.job import Job
 from app.models.search_history import SearchHistory
@@ -16,7 +16,7 @@ router = APIRouter()
 
 @router.get("/dashboard")
 async def dashboard(
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_active_user),
     db: AsyncSession = Depends(get_db),
 ):
     uid = user.user_id

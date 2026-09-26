@@ -43,6 +43,8 @@ class User(Base):
 
     # Terms of Service
     tos_accepted_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
+    # First-visit product tour: set when the user finishes or skips it.
+    tour_completed_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now())

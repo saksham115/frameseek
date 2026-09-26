@@ -6,13 +6,15 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_active_user
 from app.models.user import User
 from app.schemas.common import ApiResponse, Pagination
 from app.schemas.video import (
     FrameListResponse,
     FrameResponse,
     ProcessRequest,
+    ShotListResponse,
+    ShotResponse,
     TranscriptResponse,
     TranscriptSegmentResponse,
     VideoDetailResponse,
@@ -21,6 +23,7 @@ from app.schemas.video import (
     VideoUpdateRequest,
 )
 from app.services.job_service import JobService
+from app.services.shot_service import SHOT_SIMILARITY_THRESHOLD, ShotService
 from app.services.video_service import VideoService
 from app.utils.gcs_client import GCSClient
 from app.utils.url_helpers import resolve_storage_url
@@ -59,7 +62,7 @@ async def list_videos(
     sort: str = Query("created_at"),
     order: str = Query("desc"),
     q: str | None = Query(None, max_length=200),
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_active_user),
     db: AsyncSession = Depends(get_db),
 ):
     service = VideoService(db)
@@ -76,7 +79,7 @@ async def list_videos(
 @router.post("/upload-url")
 async def create_upload_url(
     body: UploadUrlRequest,
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_active_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Step 1 of upload: get a video id + a short-lived SAS PUT URL for direct-to-Blob upload."""
@@ -90,7 +93,7 @@ async def create_upload_url(
 @router.post("/{video_id}/finalize", response_model=ApiResponse[VideoResponse])
 async def finalize_upload(
     video_id: UUID,
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_active_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Step 2 of upload: confirm the blob, reserve quota, and start processing."""
@@ -103,7 +106,7 @@ async def finalize_upload(
 @router.get("/{video_id}", response_model=ApiResponse[VideoDetailResponse])
 async def get_video(
     video_id: UUID,
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_active_user),
     db: AsyncSession = Depends(get_db),
 ):
     service = VideoService(db)
@@ -131,7 +134,7 @@ async def get_video(
 async def update_video(
     video_id: UUID,
     data: VideoUpdateRequest,
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_active_user),
     db: AsyncSession = Depends(get_db),
 ):
     service = VideoService(db)
@@ -156,7 +159,7 @@ async def update_video(
 @router.delete("/{video_id}")
 async def delete_video(
     video_id: UUID,
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_active_user),
     db: AsyncSession = Depends(get_db),
 ):
     service = VideoService(db)
@@ -168,7 +171,7 @@ async def delete_video(
 async def process_video(
     video_id: UUID,
     data: ProcessRequest = ProcessRequest(),
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_active_user),
     db: AsyncSession = Depends(get_db),
 ):
     service = JobService(db)
@@ -180,7 +183,7 @@ async def process_video(
 @router.post("/{video_id}/retry-transcript")
 async def retry_transcript(
     video_id: UUID,
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_active_user),
     db: AsyncSession = Depends(get_db),
 ):
     service = VideoService(db)
@@ -202,7 +205,7 @@ async def retry_transcript(
 @router.get("/{video_id}/transcript", response_model=ApiResponse[TranscriptResponse])
 async def get_transcript(
     video_id: UUID,
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_active_user),
     db: AsyncSession = Depends(get_db),
 ):
     service = VideoService(db)
@@ -233,7 +236,7 @@ async def list_frames(
     video_id: UUID,
     page: int = Query(1, ge=1),
     limit: int = Query(50, ge=1, le=200),
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_active_user),
     db: AsyncSession = Depends(get_db),
 ):
     service = VideoService(db)
@@ -252,3 +255,32 @@ async def list_frames(
         frames=responses,
         pagination=Pagination(page=page, limit=limit, total=total, total_pages=math.ceil(total / limit) if limit else 0),
     ))
+
+
+@router.get("/{video_id}/shots", response_model=ApiResponse[ShotListResponse])
+async def list_shots(
+    video_id: UUID,
+    user: User = Depends(get_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Consecutive look-alike frames grouped into shots, in time order."""
+    video = await VideoService(db).get_video(video_id, user.user_id)
+    duration = float(video.duration_seconds) if video.duration_seconds is not None else None
+    shots = (
+        await ShotService(db).shots_for_videos(user.user_id, [str(video_id)], {str(video_id): duration})
+    ).get(str(video_id), [])
+    responses = []
+    for shot in shots:
+        rep = shot.representative
+        thumb_blob = rep.gcs_path.replace("/frame_", "/thumb_") if rep.gcs_path else None
+        responses.append(ShotResponse(
+            shot_index=shot.index,
+            start_seconds=shot.start_seconds,
+            end_seconds=shot.end_seconds,
+            frame_count=shot.frame_count,
+            frame_id=rep.frame_id,
+            timestamp_seconds=rep.timestamp_seconds,
+            frame_url=resolve_storage_url(rep.frame_path, rep.gcs_path),
+            thumbnail_url=resolve_storage_url(None, thumb_blob),
+        ))
+    return ApiResponse(data=ShotListResponse(shots=responses, similarity_threshold=SHOT_SIMILARITY_THRESHOLD))

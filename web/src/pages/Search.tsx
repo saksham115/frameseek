@@ -9,6 +9,7 @@ import {
   Image,
   Play,
   ScanLine,
+  Scissors,
   Search as SearchIcon,
   Sparkles,
 } from "lucide-react";
@@ -24,6 +25,7 @@ import { MediaThumbnail, PageHeader } from "@/components/MediaUI";
 import { errorStatus } from "@/lib/errors";
 import { formatTimestamp } from "@/lib/format";
 import { SEARCH_INPUT_ID } from "@/lib/navigation";
+import { clipParam } from "@/lib/shots";
 
 const SUGGESTIONS = [
   "A person by the ocean",
@@ -31,17 +33,23 @@ const SUGGESTIONS = [
   "Someone laughing",
   "A city at night",
 ];
-// Frames closer than this in one video are the same moment for a viewer.
+// Fallback for results without shot info: frames closer than this are one moment.
 const SAME_MOMENT_SECONDS = 4;
+const MAX_MOMENTS = 6;
 
 interface VideoGroup {
   video_id: string;
   video_title: string;
   best: SearchMatch;
   moments: SearchMatch[];
+  total?: number;
 }
 
-/** One card per video: its best frame, plus other distinct moments in time order. */
+/**
+ * One card per video: its best moment, plus its other moments in time order. The API
+ * already returns one result per shot; the time-gap check only covers frames that have
+ * no shot (e.g. videos indexed before shots existed).
+ */
 function groupByVideo(matches: SearchMatch[]): VideoGroup[] {
   const groups = new Map<string, VideoGroup>();
   for (const m of matches) {
@@ -54,6 +62,7 @@ function groupByVideo(matches: SearchMatch[]): VideoGroup[] {
         moments: [m],
       });
     } else if (
+      m.shot_index != null ||
       g.moments.every(
         (o) => Math.abs(o.timestamp_seconds - m.timestamp_seconds) >= SAME_MOMENT_SECONDS,
       )
@@ -61,10 +70,22 @@ function groupByVideo(matches: SearchMatch[]): VideoGroup[] {
       g.moments.push(m);
     }
   }
+  // Matches arrive best-first, so the first MAX_MOMENTS are the strongest; show those
+  // in timeline order.
   return [...groups.values()].map((g) => ({
     ...g,
-    moments: [...g.moments].sort((a, b) => a.timestamp_seconds - b.timestamp_seconds),
+    total: g.moments.length,
+    moments: g.moments
+      .slice(0, MAX_MOMENTS)
+      .sort((a, b) => a.timestamp_seconds - b.timestamp_seconds),
   }));
+}
+
+/** "0:12–0:31" for a shot, or the frame time when there's no shot. */
+function momentLabel(m: SearchMatch) {
+  return m.shot_start_seconds != null && m.shot_end_seconds != null
+    ? `${formatTimestamp(m.shot_start_seconds)}–${formatTimestamp(m.shot_end_seconds)}`
+    : formatTimestamp(m.timestamp_seconds);
 }
 
 function quotaLabel(quota: SearchQuota) {
@@ -295,7 +316,8 @@ export default function Search() {
             </strong>
             <span>
               {groups.length} {groups.length === 1 ? "video" : "videos"} ·{" "}
-              {result.matches.length} frames · Best matches first
+              {result.matches.length}{" "}
+              {result.matches.length === 1 ? "shot" : "shots"} · Best matches first
             </span>
           </div>
           {groups.length ? (
@@ -317,7 +339,7 @@ export default function Search() {
                         <Play size={15} fill="currentColor" />
                       </span>
                       <span className="timecode">
-                        {formatTimestamp(g.best.timestamp_seconds)}
+                        {momentLabel(g.best)}
                       </span>
                     </div>
                     <div className="media-card-info">
@@ -326,30 +348,43 @@ export default function Search() {
                         <span>
                           Best match {Math.round(g.best.score * 100)}% visual
                           similarity
+                          {(g.best.match_count ?? 1) > 1 &&
+                            ` · ${g.best.match_count} frames`}
                         </span>
                         <ArrowUpRight size={13} />
                       </div>
                     </div>
                   </button>
-                  {g.moments.length > 1 && (
+                  {g.best.shot_start_seconds != null &&
+                    g.best.shot_end_seconds != null && (
+                      <Link
+                        className="result-clip-link"
+                        to={`/videos/${g.video_id}?t=${g.best.shot_start_seconds}&clip=${clipParam(g.best.shot_start_seconds, g.best.shot_end_seconds)}`}
+                        aria-label={`Clip the ${momentLabel(g.best)} shot of ${g.video_title}`}
+                      >
+                        <Scissors size={12} /> Clip this shot
+                      </Link>
+                    )}
+                  {(g.total ?? g.moments.length) > 1 && (
                     <div className="result-moments" aria-label="Other moments">
                       <span>
-                        {g.moments.length} MOMENTS
+                        {g.total ?? g.moments.length}{" "}
+                        {g.best.shot_index != null ? "SHOTS" : "MOMENTS"}
                       </span>
-                      {g.moments.slice(0, 6).map((m) => (
+                      {g.moments.map((m) => (
                         <Link
                           key={m.timestamp_seconds}
                           className={
                             m === g.best ? "moment-chip is-best" : "moment-chip"
                           }
                           to={`/videos/${g.video_id}?t=${m.timestamp_seconds}`}
-                          aria-label={`Open ${g.video_title} at ${formatTimestamp(m.timestamp_seconds)}`}
+                          aria-label={`Open ${g.video_title} at ${momentLabel(m)}`}
                         >
-                          {formatTimestamp(m.timestamp_seconds)}
+                          {momentLabel(m)}
                         </Link>
                       ))}
-                      {g.moments.length > 6 && (
-                        <span>+{g.moments.length - 6}</span>
+                      {(g.total ?? 0) > g.moments.length && (
+                        <span>+{(g.total ?? 0) - g.moments.length} weaker</span>
                       )}
                     </div>
                   )}

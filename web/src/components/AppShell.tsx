@@ -21,12 +21,15 @@ import { useAuth } from "@/store/auth";
 import { formatBytes } from "@/lib/format";
 import { SEARCH_INPUT_ID, setAppNavigator } from "@/lib/navigation";
 import { isActiveUpload, useUploads } from "@/store/uploads";
+import { useTour } from "@/store/tour";
+import FeedbackDialog from "@/components/FeedbackDialog";
+import ProductTour from "@/components/ProductTour";
 import { cn } from "@/lib/utils";
 
 const NAV = [
-  { to: "/", label: "Media library", icon: FolderOpen, end: true },
-  { to: "/search", label: "Visual search", icon: Search, end: false },
-  { to: "/upload", label: "Import media", icon: Upload, end: false },
+  { to: "/", label: "Media library", icon: FolderOpen, end: true, tour: "nav-library" },
+  { to: "/search", label: "Visual search", icon: Search, end: false, tour: "nav-search" },
+  { to: "/upload", label: "Import media", icon: Upload, end: false, tour: "nav-import" },
 ];
 
 export default function AppShell() {
@@ -110,6 +113,18 @@ export default function AppShell() {
     setMenuOpen(false);
     document.title = `${pageName} — FrameSeek`;
   }, [location.pathname, pageName]);
+  // First visit after accepting the terms: show the product tour once.
+  const tourAutoStarted = useRef(false);
+  useEffect(() => {
+    if (!user || user.tour_completed_at) return;
+    // Mark as started only when it actually opens, so a remount doesn't cancel it.
+    const t = setTimeout(() => {
+      if (tourAutoStarted.current) return;
+      tourAutoStarted.current = true;
+      useTour.getState().start();
+    }, 400);
+    return () => clearTimeout(t);
+  }, [user?.id, user?.tour_completed_at]);
   useEffect(() => {
     setAppNavigator(navigate);
     return () => setAppNavigator(null);
@@ -188,11 +203,12 @@ export default function AppShell() {
         </div>
         <p className="nav-label">WORKSPACE</p>
         <nav aria-label="Main navigation">
-          {NAV.map(({ to, label, icon: Icon, end }) => (
+          {NAV.map(({ to, label, icon: Icon, end, tour }) => (
             <NavLink
               key={to}
               to={to}
               end={end}
+              data-tour={tour}
               className={({ isActive }) =>
                 cn(
                   "studio-nav",
@@ -217,6 +233,7 @@ export default function AppShell() {
         <div className="sidebar-bottom">
           <NavLink
             to="/settings"
+            data-tour="storage"
             className={cn(
               "storage-widget",
               storagePercent >= 85 && "is-warning",
@@ -310,8 +327,10 @@ export default function AppShell() {
                 </span>
               </NavLink>
             )}
+            <FeedbackDialog />
             <button
               className="topbar-search"
+              data-tour="search"
               onClick={openSearch}
               aria-label="Search your videos"
             >
@@ -337,6 +356,7 @@ export default function AppShell() {
         >
           <Outlet />
         </main>
+        <ProductTour />
       </div>
     </div>
   );

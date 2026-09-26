@@ -6,7 +6,7 @@ import httpx
 from fastapi import HTTPException, status
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token as google_id_token
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -14,6 +14,7 @@ from app.models.account_deletion_feedback import AccountDeletionFeedback
 from app.models.folder import Folder
 from app.models.search_history import SearchHistory, UserAnalytics
 from app.models.subscription import Subscription
+from app.models.user_feedback import UserFeedback
 from app.models.video import Video
 from app.repositories.user_repo import UserRepository
 from app.repositories.vector_db import vector_db
@@ -191,5 +192,9 @@ class AuthService:
         await db.execute(delete(SearchHistory).where(SearchHistory.user_id == user_id))
         await db.execute(delete(UserAnalytics).where(UserAnalytics.user_id == user_id))
         await db.execute(delete(Subscription).where(Subscription.user_id == user_id))
+        # Keep product feedback, but no longer tied to this person.
+        await db.execute(
+            update(UserFeedback).where(UserFeedback.user_id == user_id).values(user_id=None, email=None)
+        )
 
         await self.repo.update(user, deleted_at=datetime.now(timezone.utc), storage_used_bytes=0, monthly_search_count=0)

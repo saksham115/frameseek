@@ -1,4 +1,5 @@
 import secrets
+from datetime import datetime, timezone
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -7,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_active_user, get_current_user
 from app.models.user import User
 from app.schemas.auth import AcceptTosRequest, DeleteAccountRequest, UserResponse
 from app.schemas.common import ApiResponse
@@ -111,6 +112,18 @@ async def accept_tos(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Terms must be accepted")
     result = await AuthService(db).accept_tos(current_user.user_id)
     return ApiResponse(data=result)
+
+
+@router.post("/tour-complete", response_model=ApiResponse[UserResponse])
+async def complete_tour(
+    current_user: User = Depends(get_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Record that the first-visit product tour was finished or skipped (first time only)."""
+    if current_user.tour_completed_at is None:
+        current_user.tour_completed_at = datetime.now(timezone.utc)
+        await db.flush()
+    return ApiResponse(data=UserResponse.model_validate(current_user))
 
 
 @router.delete("/me")

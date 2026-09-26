@@ -66,6 +66,22 @@ export async function getFrames(id: string, page = 1) {
   };
 }
 
+export interface Shot {
+  shot_index: number;
+  start_seconds: number;
+  end_seconds: number;
+  frame_count: number;
+  frame_id: string;
+  timestamp_seconds: number;
+  frame_url: string | null;
+  thumbnail_url: string | null;
+}
+/** Consecutive look-alike frames grouped into shots, in time order. */
+export async function getShots(id: string): Promise<Shot[]> {
+  const { data } = await api.get<{ shots: Shot[] }>(`/videos/${id}/shots`);
+  return data.shots ?? [];
+}
+
 export interface TranscriptSegment {
   segment_id: string;
   start_seconds: number;

@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_active_user
 from app.models.user import User
 from app.schemas.clip import ClipCreateRequest, ClipListResponse, ClipResponse
 from app.schemas.common import ApiResponse, Pagination
@@ -22,7 +22,7 @@ router = APIRouter()
 @router.get("/{clip_id}/download-url")
 async def download_clip(
     clip_id: UUID,
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_active_user),
     db: AsyncSession = Depends(get_db),
 ):
     clip, _ = await ClipService(db).get_clip(clip_id, user.user_id)
@@ -61,7 +61,7 @@ def _to_clip_response(clip, video_title: str | None = None) -> ClipResponse:
 @router.post("", response_model=ApiResponse[ClipResponse])
 async def create_clip(
     data: ClipCreateRequest,
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_active_user),
     db: AsyncSession = Depends(get_db),
 ):
     service = ClipService(db)
@@ -82,7 +82,7 @@ async def list_clips(
     video_id: UUID | None = Query(None),
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_active_user),
     db: AsyncSession = Depends(get_db),
 ):
     service = ClipService(db)
@@ -96,7 +96,7 @@ async def list_clips(
 @router.get("/{clip_id}", response_model=ApiResponse[ClipResponse])
 async def get_clip(
     clip_id: UUID,
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_active_user),
     db: AsyncSession = Depends(get_db),
 ):
     service = ClipService(db)
@@ -107,7 +107,7 @@ async def get_clip(
 @router.delete("/{clip_id}")
 async def delete_clip(
     clip_id: UUID,
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_active_user),
     db: AsyncSession = Depends(get_db),
 ):
     service = ClipService(db)

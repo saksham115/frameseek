@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_active_user
 from app.models.user import User
 from app.schemas.common import ApiResponse
 from app.schemas.subscription import PaymentConfigResponse, SubscriptionStatusResponse
@@ -32,7 +32,7 @@ async def list_plans(db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/status", response_model=ApiResponse[SubscriptionStatusResponse])
-async def subscription_status(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+async def subscription_status(user: User = Depends(get_active_user), db: AsyncSession = Depends(get_db)):
     result = await SubscriptionService(db).get_subscription_status(user.user_id)
     return ApiResponse(data=result)
 
@@ -40,7 +40,7 @@ async def subscription_status(user: User = Depends(get_current_user), db: AsyncS
 @router.post("/checkout")
 async def create_checkout(
     body: CheckoutRequest,
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_active_user),
     db: AsyncSession = Depends(get_db),
 ):
     url = await SubscriptionService(db).create_checkout_session(user, body.price_id)
@@ -48,7 +48,7 @@ async def create_checkout(
 
 
 @router.post("/portal")
-async def billing_portal(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+async def billing_portal(user: User = Depends(get_active_user), db: AsyncSession = Depends(get_db)):
     url = await SubscriptionService(db).create_portal_session(user)
     return ApiResponse(data={"url": url})
 

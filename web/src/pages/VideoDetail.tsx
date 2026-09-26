@@ -26,7 +26,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import {
-  getFrames,
+  getShots,
   getTranscript,
   getVideo,
   renameVideo,
@@ -42,6 +42,7 @@ import ClipTools, { ClipRangeSlider } from "@/components/ClipTools";
 import { formatClipTime, type ClipRange } from "@/lib/clip-time";
 import VideoActionsMenu, { useVideoMutations } from "@/components/VideoActions";
 import { apiErrorMessage, errorStatus } from "@/lib/errors";
+import { parseClipParam, shotAt, shotClipRange } from "@/lib/shots";
 import "@/clip-tools.css";
 
 export default function VideoDetail() {
@@ -66,7 +67,6 @@ export default function VideoDetail() {
   const [muted, setMuted] = useState(false);
   const [speed, setSpeed] = useState(1);
   const [mediaError, setMediaError] = useState(false);
-  const [framePage, setFramePage] = useState(1);
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState("");
   const [saving, setSaving] = useState(false);
@@ -100,14 +100,15 @@ export default function VideoDetail() {
   const canPlay = !!video?.video_url && !mediaError && !processing;
   const progress = Math.max(0, Math.min(100, video?.progress ?? 0));
   const {
-    data: frameData,
-    isLoading: framesLoading,
-    isError: framesError,
-    refetch: refetchFrames,
+    data: shots = [],
+    isLoading: shotsLoading,
+    isError: shotsError,
+    refetch: refetchShots,
   } = useQuery({
-    queryKey: ["frames", id, framePage],
-    queryFn: () => getFrames(id, framePage),
+    queryKey: ["shots", id],
+    queryFn: () => getShots(id),
     enabled: ready,
+    staleTime: 5 * 60_000,
   });
   const {
     data: transcript,
@@ -133,7 +134,18 @@ export default function VideoDetail() {
   const transcriptSegments = (transcript?.segments ?? []).filter(
     (s) => !filterText || s.text.toLowerCase().includes(filterText),
   );
-  const frames = frameData?.frames ?? [];
+  const currentShot = shotAt(shots, currentTime);
+  const shotStripRef = useRef<HTMLDivElement>(null);
+  // Keep the shot under the playhead visible as playback moves along the strip.
+  useEffect(() => {
+    const strip = shotStripRef.current;
+    const tile = strip?.querySelector<HTMLElement>(".shot-tile.active");
+    if (!strip || !tile) return;
+    const left =
+      tile.getBoundingClientRect().left - strip.getBoundingClientRect().left + strip.scrollLeft;
+    if (left < strip.scrollLeft || left + tile.offsetWidth > strip.scrollLeft + strip.clientWidth)
+      strip.scrollTo({ left: Math.max(0, left - strip.clientWidth / 3), behavior: "smooth" });
+  }, [currentShot?.shot_index, shots.length]);
   const fullDuration = duration || video?.duration_seconds || 0;
   const clipDuration =
     Math.floor(
@@ -153,16 +165,30 @@ export default function VideoDetail() {
     if (clipPreviewRef.current) pausePlayer();
     setClipRange(range);
   };
-  const openClips = () => {
+  const openClips = (range?: ClipRange) => {
     if (tab !== "clips") pausePlayer();
-    if (clipRange[1] === 0 && clipDuration > 0) {
-      const start =
-        currentTime >= clipDuration - 0.1
-          ? Math.max(0, clipDuration - 10)
-          : Math.round(currentTime * 100) / 100;
-      setClipRange([start, Math.min(clipDuration, start + 10)]);
+    if (range) {
+      setClipRange(range);
+    } else if (clipRange[1] === 0 && clipDuration > 0) {
+      // Start from the whole shot under the playhead — usually the clip people want.
+      const shot = shotAt(shots, currentTime);
+      if (shot) {
+        setClipRange(shotClipRange(shot.start_seconds, shot.end_seconds, clipDuration));
+      } else {
+        const start =
+          currentTime >= clipDuration - 0.1
+            ? Math.max(0, clipDuration - 10)
+            : Math.round(currentTime * 100) / 100;
+        setClipRange([start, Math.min(clipDuration, start + 10)]);
+      }
     }
     setTab("clips");
+  };
+  const clipShot = (start: number, end: number) => {
+    if (!clipDuration || exportingClip) return;
+    const range = shotClipRange(start, end, clipDuration);
+    openClips(range);
+    seekTo(range[0]);
   };
   const seekTo = (seconds: number, play = false) => {
     if (!canPlay) return;
@@ -242,6 +268,16 @@ export default function VideoDetail() {
   useEffect(() => {
     seekTo(initialTime);
   }, [initialTime, id, canPlay]);
+  // "?clip=start-end" (from a search result's "Clip" action) opens the trimmer on that shot.
+  const clipParamValue = params.get("clip");
+  const appliedClipParam = useRef<string | null>(null);
+  useEffect(() => {
+    const requested = parseClipParam(clipParamValue);
+    if (!requested || !ready || !clipDuration || appliedClipParam.current === clipParamValue)
+      return;
+    appliedClipParam.current = clipParamValue;
+    openClips(shotClipRange(requested[0], requested[1], clipDuration));
+  }, [clipParamValue, ready, clipDuration]);
   useEffect(() => {
     if (!canPlay) return;
     const keydown = (e: KeyboardEvent) => {
@@ -641,12 +677,14 @@ export default function VideoDetail() {
           <section className="timeline-panel" aria-label="Timeline">
             <div className="panel-caption">
               <span>
-                <Film size={12} /> FRAME NAVIGATOR
+                <Film size={12} /> SHOT NAVIGATOR
               </span>
               <span>
                 {previewingClip
                   ? `Previewing ${formatClipTime(clipRange[1] - clipRange[0])} selection`
-                  : `${video?.frame_count ?? 0} indexed frames`}
+                  : shots.length
+                    ? `${shots.length} ${shots.length === 1 ? "shot" : "shots"} · ${video?.frame_count ?? 0} frames`
+                    : `${video?.frame_count ?? 0} indexed frames`}
               </span>
             </div>
             <div className="timeline-ruler">
@@ -677,42 +715,59 @@ export default function VideoDetail() {
                 disabled={exportingClip}
               />
             )}
-            {framesError ? (
+            {shotsError ? (
               <p className="editor-status" role="alert">
-                Frames couldn’t be loaded.{" "}
-                <button className="underline" onClick={() => refetchFrames()}>
+                Shots couldn’t be loaded.{" "}
+                <button className="underline" onClick={() => refetchShots()}>
                   Retry
                 </button>
               </p>
-            ) : frames.length ? (
-              <div className="filmstrip">
-                {frames.map((f, i) => (
-                  <button
-                    key={f.frame_id}
-                    className={cn(
-                      "filmstrip-frame",
-                      currentTime >= f.timestamp_seconds &&
-                        currentTime <
-                          (frames[i + 1]?.timestamp_seconds ??
-                            fullDuration + 0.1) &&
-                        "active",
-                    )}
-                    aria-label={`Jump to ${formatTimestamp(f.timestamp_seconds)}`}
-                    disabled={!canPlay}
-                    onClick={() => seekTo(f.timestamp_seconds)}
-                  >
-                    <MediaThumbnail src={f.thumbnail_url || f.frame_url} />
-                    <span>{formatTimestamp(f.timestamp_seconds)}</span>
-                  </button>
-                ))}
+            ) : shots.length ? (
+              <div className="filmstrip shotstrip" ref={shotStripRef}>
+                {shots.map((shot) => {
+                  const span = shot.end_seconds - shot.start_seconds;
+                  const selected =
+                    tab === "clips" &&
+                    clipRange[0] < shot.end_seconds - 0.01 &&
+                    clipRange[1] > shot.start_seconds + 0.01;
+                  return (
+                    <button
+                      key={shot.shot_index}
+                      className={cn(
+                        "filmstrip-frame shot-tile",
+                        currentShot?.shot_index === shot.shot_index && "active",
+                        selected && "in-clip",
+                      )}
+                      style={{ flexGrow: Math.max(1, Math.min(6, span / 4)) }}
+                      title={`${formatTimestamp(shot.start_seconds)}–${formatTimestamp(shot.end_seconds)} · ${shot.frame_count} similar ${shot.frame_count === 1 ? "frame" : "frames"}`}
+                      aria-label={
+                        tab === "clips"
+                          ? `Select shot ${formatTimestamp(shot.start_seconds)} to ${formatTimestamp(shot.end_seconds)} for the clip`
+                          : `Jump to shot at ${formatTimestamp(shot.start_seconds)}`
+                      }
+                      disabled={!canPlay || (tab === "clips" && exportingClip)}
+                      onClick={() =>
+                        tab === "clips"
+                          ? clipShot(shot.start_seconds, shot.end_seconds)
+                          : seekTo(shot.start_seconds)
+                      }
+                    >
+                      <MediaThumbnail src={shot.thumbnail_url || shot.frame_url} />
+                      <span>{formatTimestamp(shot.start_seconds)}</span>
+                      {shot.frame_count > 1 && (
+                        <span className="shot-count">×{shot.frame_count}</span>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             ) : (
               <div className="filmstrip-empty">
-                {framesLoading
-                  ? "Loading indexed frames…"
+                {shotsLoading
+                  ? "Finding shots…"
                   : ready
                     ? "No frames available"
-                    : "Your indexed frames will appear here"}
+                    : "Your shots will appear here"}
               </div>
             )}
             <div className="timeline-footer">
@@ -720,34 +775,10 @@ export default function VideoDetail() {
                 {processing
                   ? "The timeline will unlock when processing is complete"
                   : tab === "clips"
-                    ? "Drag the handles to set your in and out points"
-                    : "Click a frame to explore that moment"}
+                    ? "Click a shot to select it, or drag the handles to fine-tune"
+                    : "Similar frames are grouped into shots. Click one to jump there"}
               </span>
-              {(frameData?.pagination.total_pages ?? 0) > 1 ? (
-                <div className="flex gap-2 items-center">
-                  <button
-                    className="icon-button"
-                    aria-label="Previous frames"
-                    disabled={framePage <= 1}
-                    onClick={() => setFramePage((p) => p - 1)}
-                  >
-                    <ChevronLeft size={13} />
-                  </button>
-                  <span>
-                    {framePage} / {frameData?.pagination.total_pages}
-                  </span>
-                  <button
-                    className="icon-button"
-                    aria-label="Next frames"
-                    disabled={
-                      framePage >= (frameData?.pagination.total_pages ?? 1)
-                    }
-                    onClick={() => setFramePage((p) => p + 1)}
-                  >
-                    <ChevronRight size={13} />
-                  </button>
-                </div>
-              ) : canPlay ? (
+              {canPlay ? (
                 <span>
                   <kbd>Space</kbd> Play / pause
                 </span>
@@ -792,7 +823,7 @@ export default function VideoDetail() {
               <FileText size={14} /> Transcript
             </button>
             <button
-              onClick={openClips}
+              onClick={() => openClips()}
               className={cn(tab === "clips" && "active")}
               aria-pressed={tab === "clips"}
             >
@@ -855,31 +886,49 @@ export default function VideoDetail() {
               {matches ? (
                 <>
                   <div className="inspector-results-label">
-                    {matches.length} MATCHING FRAMES
+                    {matches.length} MATCHING {matches.length === 1 ? "SHOT" : "SHOTS"}
                   </div>
                   <div className="inspector-results">
                     {matches.length ? (
-                      matches.map((m, i) => (
-                        <button
-                          className="inspector-result"
-                          key={i}
-                          onClick={() => seekTo(m.timestamp_seconds, true)}
-                          aria-label={`Play match at ${formatTimestamp(m.timestamp_seconds)}`}
-                        >
-                          <div className="result-thumb">
-                            <MediaThumbnail src={m.frame_url} />
+                      matches.map((m, i) => {
+                        const hasShot = m.shot_start_seconds != null && m.shot_end_seconds != null;
+                        return (
+                          <div className="inspector-result-row" key={i}>
+                            <button
+                              className="inspector-result"
+                              onClick={() => seekTo(m.timestamp_seconds, true)}
+                              aria-label={`Play match at ${formatTimestamp(m.timestamp_seconds)}`}
+                            >
+                              <div className="result-thumb">
+                                <MediaThumbnail src={m.frame_url} />
+                              </div>
+                              <div>
+                                <strong>
+                                  {hasShot
+                                    ? `${formatTimestamp(m.shot_start_seconds!)}–${formatTimestamp(m.shot_end_seconds!)}`
+                                    : formatTimestamp(m.timestamp_seconds)}
+                                </strong>
+                                <span>
+                                  {Math.round(m.score * 100)}% visual similarity
+                                  {(m.match_count ?? 1) > 1 && ` · ${m.match_count} frames`}
+                                </span>
+                              </div>
+                              <Play size={12} />
+                            </button>
+                            {hasShot && (
+                              <button
+                                className="icon-button result-clip"
+                                title="Clip this shot"
+                                aria-label={`Clip the shot from ${formatTimestamp(m.shot_start_seconds!)} to ${formatTimestamp(m.shot_end_seconds!)}`}
+                                disabled={!canPlay || !clipDuration}
+                                onClick={() => clipShot(m.shot_start_seconds!, m.shot_end_seconds!)}
+                              >
+                                <Scissors size={13} />
+                              </button>
+                            )}
                           </div>
-                          <div>
-                            <strong>
-                              {formatTimestamp(m.timestamp_seconds)}
-                            </strong>
-                            <span>
-                              {Math.round(m.score * 100)}% visual similarity
-                            </span>
-                          </div>
-                          <Play size={12} />
-                        </button>
-                      ))
+                        );
+                      })
                     ) : (
                       <p className="inspector-hint">
                         No matching frames. Try a simpler description.

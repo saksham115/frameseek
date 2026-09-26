@@ -30,6 +30,13 @@ export function setAuthFailureHandler(fn: () => void) {
   onAuthFailure = fn;
 }
 
+// Invoked when the API refuses a call because the Terms haven't been accepted (e.g. a
+// stale tab from before acceptance was required), so the app can show the terms gate.
+let onTermsRequired: (() => void) | null = null;
+export function setTermsRequiredHandler(fn: () => void) {
+  onTermsRequired = fn;
+}
+
 api.interceptors.response.use(
   (res) => {
     // The API wraps payloads in { success, data, meta }. Unwrap to the inner data so
@@ -44,6 +51,9 @@ api.interceptors.response.use(
     const original = error.config as (AxiosRequestConfig & { _retried?: boolean }) | undefined;
     const isAuthCall = original?.url?.includes("/auth/refresh") || original?.url?.includes("/auth/login");
 
+    if (error.response?.status === 403 && error.response.headers["x-requires-acceptance"]) {
+      onTermsRequired?.();
+    }
     if (error.response?.status === 401 && original && !original._retried && !isAuthCall) {
       original._retried = true;
       try {

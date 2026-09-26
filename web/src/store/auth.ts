@@ -8,6 +8,7 @@ interface AuthState {
   loadSession: () => Promise<void>;
   logout: () => Promise<void>;
   setAnonymous: () => void;
+  setUser: (user: User) => void;
 }
 
 export const useAuth = create<AuthState>((set) => ({
@@ -33,4 +34,5 @@ export const useAuth = create<AuthState>((set) => ({
 
   // Called by the API client when a token refresh fails terminally.
   setAnonymous: () => set({ user: null, status: "anonymous" }),
+  setUser: (user) => set({ user, status: "authenticated" }),
 }));

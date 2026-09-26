@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { Link } from "react-router-dom";
 import { ArrowUpRight, Focus, ScanLine } from "lucide-react";
 import LogoIcon from "@/components/LogoIcon";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -105,6 +106,11 @@ export default function Login() {
           </div>
           <p className="login-small">
             Your videos and workspace stay private to you.
+          </p>
+          <p className="login-legal">
+            New here? You’ll be asked to accept our{" "}
+            <Link to="/terms">Terms of Service</Link> and{" "}
+            <Link to="/privacy">Privacy Policy</Link> before you start.
           </p>
         </div>
         <p className="login-copyright">

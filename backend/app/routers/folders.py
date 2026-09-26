@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_active_user
 from app.models.user import User
 from app.repositories.folder_repo import FolderRepository
 from app.schemas.common import ApiResponse
@@ -15,7 +15,7 @@ router = APIRouter()
 
 @router.get("", response_model=ApiResponse[FolderListResponse])
 async def list_folders(
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_active_user),
     db: AsyncSession = Depends(get_db),
 ):
     repo = FolderRepository(db)
@@ -31,7 +31,7 @@ async def list_folders(
 @router.post("", response_model=ApiResponse[FolderResponse])
 async def create_folder(
     data: FolderCreate,
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_active_user),
     db: AsyncSession = Depends(get_db),
 ):
     repo = FolderRepository(db)
@@ -61,7 +61,7 @@ async def create_folder(
 async def update_folder(
     folder_id: UUID,
     data: FolderUpdate,
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_active_user),
     db: AsyncSession = Depends(get_db),
 ):
     repo = FolderRepository(db)
@@ -84,7 +84,7 @@ async def update_folder(
 @router.delete("/{folder_id}")
 async def delete_folder(
     folder_id: UUID,
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_active_user),
     db: AsyncSession = Depends(get_db),
 ):
     repo = FolderRepository(db)

@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/store/auth";
-import { setAuthFailureHandler } from "@/api/client";
+import { setAuthFailureHandler, setTermsRequiredHandler } from "@/api/client";
 import AppShell from "@/components/AppShell";
 import LogoIcon from "@/components/LogoIcon";
 import Login from "@/pages/Login";
@@ -12,6 +12,8 @@ import VideoDetail from "@/pages/VideoDetail";
 import Settings from "@/pages/Settings";
 import Paywall from "@/pages/Paywall";
 import NotFound from "@/pages/NotFound";
+import Legal from "@/pages/Legal";
+import TermsGate from "@/components/TermsGate";
 import { rememberReturnPath, takeReturnPath } from "@/lib/navigation";
 
 /** Sends anonymous visitors to sign in, remembering the page they were trying to open. */
@@ -22,11 +24,12 @@ function RedirectToLogin() {
 }
 
 const App = () => {
-  const { status, loadSession, setAnonymous } = useAuth();
+  const { status, user, loadSession, setAnonymous } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
     setAuthFailureHandler(setAnonymous);
+    setTermsRequiredHandler(loadSession);
     loadSession();
   }, [loadSession, setAnonymous]);
 
@@ -53,13 +56,29 @@ const App = () => {
     return (
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/terms" element={<Legal kind="terms" />} />
+        <Route path="/privacy" element={<Legal kind="privacy" />} />
         <Route path="*" element={<RedirectToLogin />} />
+      </Routes>
+    );
+  }
+
+  // Until the Terms and Privacy Policy are accepted, nothing else renders. The URL is
+  // left alone so the user lands where they were headed once they accept.
+  if (!user?.tos_accepted_at) {
+    return (
+      <Routes>
+        <Route path="/terms" element={<Legal kind="terms" />} />
+        <Route path="/privacy" element={<Legal kind="privacy" />} />
+        <Route path="*" element={<TermsGate />} />
       </Routes>
     );
   }
 
   return (
     <Routes>
+      <Route path="/terms" element={<Legal kind="terms" />} />
+      <Route path="/privacy" element={<Legal kind="privacy" />} />
       <Route element={<AppShell />}>
         <Route index element={<Library />} />
         <Route path="/search" element={<Search />} />

@@ -5,6 +5,10 @@ export interface User {
   plan: string;
   storage_used_bytes: number;
   storage_limit_bytes: number;
+  /** When the user accepted the Terms and Privacy Policy; null until they do. */
+  tos_accepted_at: string | null;
+  /** When the first-visit product tour was finished or skipped; null until then. */
+  tour_completed_at: string | null;
 }
 
 export type VideoStatus =
@@ -39,6 +43,13 @@ export interface SearchMatch {
   timestamp_seconds: number;
   frame_url: string;
   score: number;
+  /** The shot (run of look-alike frames) this match falls in; absent for unindexed frames. */
+  shot_index?: number | null;
+  shot_start_seconds?: number | null;
+  shot_end_seconds?: number | null;
+  shot_frame_count?: number | null;
+  /** How many frames of that shot matched; the API returns one result per shot. */
+  match_count?: number;
 }
 
 export interface Plan {
@@ -58,6 +69,8 @@ interface RawUser {
   plan_type: string;
   storage_used_bytes: number;
   storage_limit_bytes: number;
+  tos_accepted_at?: string | null;
+  tour_completed_at?: string | null;
 }
 
 export function mapUser(u: RawUser): User {
@@ -68,6 +81,8 @@ export function mapUser(u: RawUser): User {
     plan: u.plan_type,
     storage_used_bytes: u.storage_used_bytes,
     storage_limit_bytes: u.storage_limit_bytes,
+    tos_accepted_at: u.tos_accepted_at ?? null,
+    tour_completed_at: u.tour_completed_at ?? null,
   };
 }
 

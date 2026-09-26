@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_active_user
 from app.models.user import User
 from app.schemas.common import ApiResponse
 from app.schemas.search import SearchHistoryItem, SearchHistoryResponse, SearchQuota, SearchRequest, SearchResponse
@@ -14,7 +14,7 @@ router = APIRouter()
 @router.post("", response_model=ApiResponse[SearchResponse])
 async def search(
     data: SearchRequest,
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_active_user),
     db: AsyncSession = Depends(get_db),
 ):
     service = SearchService(db)
@@ -25,7 +25,7 @@ async def search(
 @router.get("/history", response_model=ApiResponse[SearchHistoryResponse])
 async def search_history(
     limit: int = Query(20, ge=1, le=100),
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_active_user),
     db: AsyncSession = Depends(get_db),
 ):
     service = SearchService(db)
@@ -37,7 +37,7 @@ async def search_history(
 
 @router.get("/quota", response_model=ApiResponse[SearchQuota])
 async def search_quota(
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_active_user),
     db: AsyncSession = Depends(get_db),
 ):
     service = SearchService(db)

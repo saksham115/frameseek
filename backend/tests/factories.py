@@ -23,6 +23,7 @@ async def create_user(
     storage_used_bytes: int = 0,
     monthly_search_count: int = 0,
     search_count_reset_at: datetime | None = None,
+    tos_accepted_at: datetime | None = None,
 ) -> User:
     user = User(
         email=email or f"user-{uuid.uuid4().hex[:8]}@test.com",
@@ -32,6 +33,7 @@ async def create_user(
         storage_used_bytes=storage_used_bytes,
         monthly_search_count=monthly_search_count,
         search_count_reset_at=search_count_reset_at,
+        tos_accepted_at=tos_accepted_at or datetime.now(timezone.utc),
     )
     db.add(user)
     await db.flush()

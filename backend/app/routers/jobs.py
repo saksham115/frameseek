@@ -8,7 +8,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_active_user
 from app.models.user import User
 from app.schemas.common import ApiResponse, Pagination
 from app.schemas.job import JobListResponse, JobResponse
@@ -23,7 +23,7 @@ async def list_jobs(
     video_id: UUID | None = Query(None),
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_active_user),
     db: AsyncSession = Depends(get_db),
 ):
     service = JobService(db)
@@ -44,7 +44,7 @@ async def list_jobs(
 @router.get("/{job_id}", response_model=ApiResponse[JobResponse])
 async def get_job(
     job_id: UUID,
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_active_user),
     db: AsyncSession = Depends(get_db),
 ):
     service = JobService(db)
@@ -57,7 +57,7 @@ async def get_job(
 @router.post("/{job_id}/cancel")
 async def cancel_job(
     job_id: UUID,
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_active_user),
     db: AsyncSession = Depends(get_db),
 ):
     service = JobService(db)
@@ -68,7 +68,7 @@ async def cancel_job(
 @router.get("/{job_id}/progress")
 async def job_progress_sse(
     job_id: UUID,
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_active_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Server-Sent Events stream for job progress."""

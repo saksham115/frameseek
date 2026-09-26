@@ -1,7 +1,10 @@
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { useTour } from "@/store/tour";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   ArrowUpRight,
+  Compass,
+  FileText,
   HardDrive,
   ShieldCheck,
   SunMoon,
@@ -30,6 +33,7 @@ import { formatBytes } from "@/lib/format";
 
 export default function Settings() {
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const { data: paymentConfig } = useQuery({
     queryKey: ["payment-config"],
     queryFn: getPaymentConfig,
@@ -133,6 +137,54 @@ export default function Settings() {
           </div>
         </section>
       )}
+      <section className="settings-card flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-3 mb-2">
+            <Compass size={16} className="text-primary" />
+            <h2>Product tour</h2>
+          </div>
+          <p>A one-minute walkthrough of importing, searching and clipping.</p>
+        </div>
+        <Button
+          variant="outline"
+          className="studio-button"
+          onClick={() => {
+            navigate("/");
+            useTour.getState().start();
+          }}
+        >
+          Take the tour again
+        </Button>
+      </section>
+      <section className="settings-card">
+        <div className="flex items-center gap-3 mb-2">
+          <FileText size={16} className="text-primary" />
+          <h2>Terms &amp; privacy</h2>
+        </div>
+        <div className="settings-row">
+          <span>Accepted</span>
+          <strong>
+            {user?.tos_accepted_at
+              ? new Date(user.tos_accepted_at).toLocaleDateString(undefined, {
+                  year: "numeric",
+                  month: "long",
+                  day: "numeric",
+                })
+              : "Not yet"}
+          </strong>
+        </div>
+        <div className="settings-row">
+          <span>Documents</span>
+          <strong className="flex gap-4">
+            <Link className="text-primary" to="/terms">
+              Terms of Service
+            </Link>
+            <Link className="text-primary" to="/privacy">
+              Privacy Policy
+            </Link>
+          </strong>
+        </div>
+      </section>
       <section className="settings-card">
         <h2>Delete account</h2>
         <p className="mt-2 mb-5">

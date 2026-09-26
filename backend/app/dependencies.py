@@ -43,3 +43,22 @@ async def get_current_user(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
 
     return user
+
+
+# Sent with the 403 so clients can tell "accept the terms first" apart from other denials.
+TOS_REQUIRED_HEADER = "X-Requires-Acceptance"
+
+
+async def get_active_user(user: User = Depends(get_current_user)) -> User:
+    """A signed-in user who has accepted the Terms of Service and Privacy Policy.
+
+    Everything except the auth endpoints (sign-in, profile, accepting, sign-out and
+    account deletion) requires this, so the platform isn't usable until acceptance.
+    """
+    if user.tos_accepted_at is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Accept the Terms of Service and Privacy Policy to continue.",
+            headers={TOS_REQUIRED_HEADER: "tos"},
+        )
+    return user

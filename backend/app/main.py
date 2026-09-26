@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
 from app.config import settings
-from app.routers import analytics, auth, clips, folders, jobs, search, storage, subscriptions, videos
+from app.routers import analytics, auth, clips, feedback, folders, jobs, search, storage, subscriptions, videos
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +61,7 @@ app.include_router(analytics.router, prefix="/api/v1/analytics", tags=["analytic
 app.include_router(storage.router, prefix="/api/v1/storage", tags=["storage"])
 app.include_router(clips.router, prefix="/api/v1/clips", tags=["clips"])
 app.include_router(subscriptions.router, prefix="/api/v1/subscriptions", tags=["subscriptions"])
+app.include_router(feedback.router, prefix="/api/v1/feedback", tags=["feedback"])
 
 
 @app.get("/health")

@@ -22,6 +22,13 @@ class SearchResultItem(BaseModel):
     frame_url: str
     thumbnail_url: str | None = None
     match_type: str = "semantic_visual"
+    # The shot (run of look-alike frames) this match falls in. Matches in the same shot
+    # are collapsed into one result; match_count says how many frames matched.
+    shot_index: int | None = None
+    shot_start_seconds: float | None = None
+    shot_end_seconds: float | None = None
+    shot_frame_count: int | None = None
+    match_count: int = 1
 
 
 class SearchQuota(BaseModel):
