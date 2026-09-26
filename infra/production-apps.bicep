@@ -17,10 +17,15 @@ param visionEndpoint string
 param openAiEndpoint string
 param whisperDeployment string = 'whisper'
 param deployServices bool = true
+@description('Public hostname users reach the app on (custom domain bound to frameseek-web).')
+param publicHostname string = 'app.frameseek.in'
+@description('Name of the managed certificate for publicHostname in the Container Apps environment. It is issued once by `az containerapp hostname bind` (the DNS records must exist first).')
+param publicHostnameCertificate string = 'mc-cae-fs-g7unyr2-app-frameseek-in-4688'
 
 var webName = 'frameseek-web'
 var apiName = 'frameseek-api'
-var webOrigin = 'https://${webName}.${defaultDomain}'
+var defaultOrigin = 'https://${webName}.${defaultDomain}'
+var webOrigin = empty(publicHostname) ? defaultOrigin : 'https://${publicHostname}'
 var workloadIdentity = { type: 'UserAssigned', userAssignedIdentities: { '${identityId}': {} } }
 var registries = [{ server: acrLoginServer, identity: identityId }]
 var apiImage = '${acrLoginServer}/frameseek-api:${imageTag}'
@@ -39,7 +44,7 @@ var commonEnv = [
   { name: 'GOOGLE_CLIENT_ID', value: googleClientId }
   { name: 'GOOGLE_OAUTH_REDIRECT_URI', value: '${webOrigin}/api/v1/auth/google/callback' }
   { name: 'FRONTEND_URL', value: webOrigin }
-  { name: 'CORS_ORIGINS', value: webOrigin }
+  { name: 'CORS_ORIGINS', value: webOrigin == defaultOrigin ? webOrigin : '${webOrigin},${defaultOrigin}' }
   { name: 'SERVICE_BUS_FQDN', value: serviceBusFqdn }
   { name: 'SERVICE_BUS_QUEUE', value: 'video-processing' }
   { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: appInsightsConnectionString }
@@ -82,7 +87,20 @@ resource web 'Microsoft.App/containerApps@2024-03-01' = if (deployServices) {
     managedEnvironmentId: environmentId
     configuration: {
       activeRevisionsMode: 'Single'
-      ingress: { external: true, targetPort: 8080, transport: 'auto', allowInsecure: false }
+      ingress: {
+        external: true
+        targetPort: 8080
+        transport: 'auto'
+        allowInsecure: false
+        // Keep the custom domain bound when this template is redeployed.
+        customDomains: empty(publicHostname) || empty(publicHostnameCertificate) ? [] : [
+          {
+            name: publicHostname
+            bindingType: 'SniEnabled'
+            certificateId: '${environmentId}/managedCertificates/${publicHostnameCertificate}'
+          }
+        ]
+      }
       registries: registries
     }
     template: {

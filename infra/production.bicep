@@ -10,6 +10,8 @@ param jwtSecret string
 @secure()
 param googleClientSecret string
 param deployerObjectId string
+@description('Public hostname users reach the app on (custom domain bound to frameseek-web).')
+param publicHostname string = 'app.frameseek.in'
 
 var token = toLower(uniqueString(resourceGroup().id, 'prod'))
 var tags = { application: 'frameseek', environment: 'prod', managedBy: 'bicep' }
@@ -42,7 +44,9 @@ module blob 'modules/storage.bicep' = {
     namePrefix: namePrefix
     resourceToken: token
     principalId: identity.outputs.principalId
-    allowedOrigins: ['https://frameseek-web.${environment.outputs.defaultDomain}']
+    // Browsers upload straight to Blob, so both the custom domain and the default
+    // Container Apps hostname (still reachable) must be allowed.
+    allowedOrigins: ['https://${publicHostname}', 'https://frameseek-web.${environment.outputs.defaultDomain}']
   }
 }
 module postgres 'modules/postgres.bicep' = {
