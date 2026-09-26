@@ -113,7 +113,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         set({ user, tosAccepted: freshTos });
         useSubscriptionStore.getState().initialize();
       } catch {
-        // Token may be expired — interceptor will handle refresh or logout
+        // Token may be expired: interceptor will handle refresh or logout
       }
     } catch {
       set({ isLoading: false });

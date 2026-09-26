@@ -1,6 +1,6 @@
 # Local dev infrastructure. Ports bound to loopback only.
 # Postgres ships with pgvector; Azurite emulates Blob Storage.
-# Redis is NOT here — use your host Redis on :6379 (REDIS_URL=redis://localhost:6379).
+# Redis is NOT here: use your host Redis on :6379 (REDIS_URL=redis://localhost:6379).
 # If you don't have one: `brew install redis && brew services start redis`.
 services:
   postgres:

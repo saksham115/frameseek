@@ -45,7 +45,7 @@ def _to_clip_response(clip, video_title: str | None = None) -> ClipResponse:
     # Clip URL (signed GCS or local /storage/)
     resp.clip_url = resolve_storage_url(clip.file_path, clip.gcs_path)
 
-    # Thumbnail — GCS first when enabled, local fallback
+    # Thumbnail: GCS first when enabled, local fallback
     if clip.gcs_path and GCSClient.is_enabled():
         resp.thumbnail_url = GCSClient.get().generate_signed_url(
             f"clips/{clip.clip_id}/thumbnail.jpg"

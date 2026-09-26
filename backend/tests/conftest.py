@@ -27,7 +27,7 @@ _tables_created = False
 
 
 # ---------------------------------------------------------------------------
-# Function-scoped DB session — for test fixture setup / assertions.
+# Function-scoped DB session: for test fixture setup / assertions.
 # Creates tables on first use, truncates after each test.
 # ---------------------------------------------------------------------------
 @pytest.fixture
@@ -47,7 +47,7 @@ async def db_session():
         except Exception:
             await session.rollback()
 
-    # Truncate all tables after the test — always runs.
+    # Truncate all tables after the test: always runs.
     async with engine.begin() as conn:
         await conn.execute(
             text(

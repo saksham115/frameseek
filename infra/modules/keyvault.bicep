@@ -1,4 +1,4 @@
-// Key Vault (RBAC mode) — single source of truth for JWT secret, Stripe keys, Google
+// Key Vault (RBAC mode): single source of truth for JWT secret, Stripe keys, Google
 // OAuth client secret, Postgres connection string. Kills the placeholder-JWT finding.
 param location string
 param tags object
@@ -30,7 +30,7 @@ resource vault 'Microsoft.KeyVault/vaults@2023-07-01' = {
   }
 }
 
-// Key Vault Secrets User — lets the workload identity read secrets at runtime.
+// Key Vault Secrets User: lets the workload identity read secrets at runtime.
 var secretsUserRoleId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e6')
 
 resource secretsUser 'Microsoft.Authorization/roleAssignments@2022-04-01' = {

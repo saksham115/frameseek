@@ -58,7 +58,7 @@ export function ClipRangeSlider({
           <Scissors size={11} /> SELECTED RANGE
         </span>
         <span>
-          {formatClipTime(range[0])} — {formatClipTime(range[1])}
+          {formatClipTime(range[0])} – {formatClipTime(range[1])}
         </span>
       </div>
       <SliderPrimitive.Root
@@ -123,7 +123,7 @@ export default function ClipTools({
   const qc = useQueryClient();
   const [inPoint, setInPoint] = useState(formatClipTime(range[0]));
   const [outPoint, setOutPoint] = useState(formatClipTime(range[1]));
-  const [name, setName] = useState(`${title} — clip`.slice(0, 150));
+  const [name, setName] = useState(`${title} clip`.slice(0, 150));
   const [creating, setCreating] = useState(false);
   const [exportError, setExportError] = useState("");
   const [selected, setSelected] = useState<Clip | null>(null);
@@ -329,7 +329,7 @@ export default function ClipTools({
                 <strong>
                   {start !== null && end !== null && end > start
                     ? formatClipTime(end - start)
-                    : "—"}
+                    : "--:--.--"}
                 </strong>
                 <span>MAX 02:00</span>
               </div>
@@ -498,7 +498,7 @@ export default function ClipTools({
                       <span>
                         <strong>{clip.title}</strong>
                         <small>
-                          {formatClipTime(clip.start_time)} —{" "}
+                          {formatClipTime(clip.start_time)} –{" "}
                           {formatClipTime(clip.end_time)}
                         </small>
                       </span>

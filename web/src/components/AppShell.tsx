@@ -111,7 +111,7 @@ export default function AppShell() {
   }, [menuOpen]);
   useEffect(() => {
     setMenuOpen(false);
-    document.title = `${pageName} — FrameSeek`;
+    document.title = `${pageName} | FrameSeek`;
   }, [location.pathname, pageName]);
   // First visit after accepting the terms: show the product tour once.
   const tourAutoStarted = useRef(false);

@@ -170,7 +170,7 @@ export default function VideoDetail() {
     if (range) {
       setClipRange(range);
     } else if (clipRange[1] === 0 && clipDuration > 0) {
-      // Start from the whole shot under the playhead — usually the clip people want.
+      // Start from the whole shot under the playhead: usually the clip people want.
       const shot = shotAt(shots, currentTime);
       if (shot) {
         setClipRange(shotClipRange(shot.start_seconds, shot.end_seconds, clipDuration));

@@ -1,4 +1,4 @@
-// Azure Container Registry — CI pushes API and worker images here; the workload identity
+// Azure Container Registry: CI pushes API and worker images here; the workload identity
 // pulls with AcrPull (no admin user / no registry passwords).
 param location string
 param tags object

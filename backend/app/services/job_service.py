@@ -44,7 +44,7 @@ class JobService:
         await self.job_repo.db.commit()
 
         # Enqueue to Service Bus. A failure must not silently strand the job as "queued"
-        # forever — surface it so the client can retry.
+        # forever. Surface it so the client can retry.
         try:
             from app.workers.worker import enqueue_job
             await enqueue_job(str(job.job_id))

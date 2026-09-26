@@ -6,7 +6,7 @@ import ThemeToggle from "@/components/ThemeToggle";
 import { API_BASE_URL } from "@/lib/config";
 export default function Login() {
   useEffect(() => {
-    document.title = "Sign in — FrameSeek";
+    document.title = "Sign in | FrameSeek";
   }, []);
   return (
     <div className="login-page">

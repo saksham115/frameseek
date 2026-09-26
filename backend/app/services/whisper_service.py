@@ -1,4 +1,4 @@
-"""Transcription — Azure OpenAI Whisper (replaces the self-hosted Whisper model).
+"""Transcription: Azure OpenAI Whisper (replaces the self-hosted Whisper model).
 
 ``extract_audio`` (ffmpeg) is unchanged; ``transcribe`` now calls the Azure OpenAI
 Whisper deployment with verbose_json to get per-segment timings. No model weights ship

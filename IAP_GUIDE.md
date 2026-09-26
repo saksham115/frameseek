@@ -1,4 +1,4 @@
-# FrameSeek — In-App Purchases Guide
+# FrameSeek: In-App Purchases Guide
 
 iOS subscription system using Apple StoreKit 2 via `react-native-iap`, with server-side receipt verification.
 
@@ -6,7 +6,7 @@ iOS subscription system using Apple StoreKit 2 via `react-native-iap`, with serv
 
 | Plan | Storage | Searches | Retention | Monthly | Annual |
 |------|---------|----------|-----------|---------|--------|
-| Free | 5 GB | 20/month | 15 days | — | — |
+| Free | 5 GB | 20/month | 15 days | - | - |
 | Pro | 20 GB | 100/month | 90 days | $6.99 | $55.99 |
 | Pro Max | 50 GB | 500/month | 90 days | $14.99 | $119.99 |
 
@@ -62,7 +62,7 @@ These must match exactly in App Store Connect, backend config, and mobile config
 ### Mobile
 | File | Purpose |
 |------|---------|
-| `src/store/slices/subscriptionSlice.ts` | Zustand store — IAP connection, purchase flow, listeners |
+| `src/store/slices/subscriptionSlice.ts` | Zustand store: IAP connection, purchase flow, listeners |
 | `src/screens/settings/PaywallScreen.tsx` | Plan cards, billing toggle, purchase buttons |
 | `src/screens/settings/SubscriptionManagementScreen.tsx` | Current plan details, manage/upgrade |
 | `src/services/api/subscriptions.api.ts` | API calls to backend |
@@ -109,7 +109,7 @@ curl http://localhost:8000/api/v1/subscriptions/status \
 
 ```
 
-In local mode, `receipt_data` is the product ID directly — no Apple verification happens.
+In local mode, `receipt_data` is the product ID directly: no Apple verification happens.
 
 ### Testing on iOS Simulator (with StoreKit config)
 
@@ -124,10 +124,10 @@ In local mode, `receipt_data` is the product ID directly — no Apple verificati
 ### Xcode StoreKit Debug Tools
 
 While the app runs in the simulator:
-- **Debug → StoreKit → Manage Transactions** — view/delete purchases
-- **Debug → StoreKit → Expire Subscriptions** — force expiry
-- **Debug → StoreKit → Enable Billing Retry** — simulate payment failure
-- **Debug → StoreKit → Subscription Renewal Rate** — adjust speed (1 month = 5 min by default)
+- **Debug → StoreKit → Manage Transactions**: view/delete purchases
+- **Debug → StoreKit → Expire Subscriptions**: force expiry
+- **Debug → StoreKit → Enable Billing Retry**: simulate payment failure
+- **Debug → StoreKit → Subscription Renewal Rate**: adjust speed (1 month = 5 min by default)
 
 ---
 
@@ -172,11 +172,11 @@ Real Apple IAP on a physical device, but with sandbox (no real money charged).
 #### iOS Device
 
 - [ ] On test device: Settings → App Store → Sandbox Account → sign in with sandbox account
-- [ ] Build app to device via Xcode (no StoreKit config needed — it uses real sandbox)
+- [ ] Build app to device via Xcode (no StoreKit config needed: it uses real sandbox)
 - [ ] Test purchase flow end-to-end
 - [ ] Verify subscription activates in your backend
 - [ ] Test restore purchases
-- [ ] Wait for auto-renewal (sandbox renews fast — 1 month = 5 minutes)
+- [ ] Wait for auto-renewal (sandbox renews fast: 1 month = 5 minutes)
 - [ ] Cancel via sandbox account and verify downgrade
 
 #### Sandbox Renewal Schedule
@@ -211,7 +211,7 @@ Subscriptions auto-renew up to 6 times in sandbox, then stop.
 
 - [ ] Set production notification URL: `https://api.frameseek.com/api/v1/subscriptions/apple-notification`
 - [ ] Verify all 4 subscription products are in **"Ready to Submit"** status
-- [ ] Ensure subscription group ranking is correct (Pro Max above Pro — higher tier first)
+- [ ] Ensure subscription group ranking is correct (Pro Max above Pro: higher tier first)
 
 #### Backend
 
@@ -222,8 +222,8 @@ Subscriptions auto-renew up to 6 times in sandbox, then stop.
   APPLE_BUNDLE_ID=in.frameseek.app
   ```
 - [ ] Verify cron jobs are running:
-  - `retention_cleanup_task` — daily at 3 AM UTC
-  - `subscription_expiry_task` — every 6 hours
+  - `retention_cleanup_task`: daily at 3 AM UTC
+  - `subscription_expiry_task`: every 6 hours
 - [ ] Monitor logs for receipt verification failures
 - [ ] Set up alerts for webhook processing errors
 
@@ -233,7 +233,7 @@ Subscriptions auto-renew up to 6 times in sandbox, then stop.
 - [ ] Restore Purchases button accessible (required by Apple)
 - [ ] Link to Terms of Service
 - [ ] Link to Privacy Policy (must mention subscription data)
-- [ ] No references to pricing in screenshots (Apple may reject — prices vary by region)
+- [ ] No references to pricing in screenshots (Apple may reject: prices vary by region)
 - [ ] Subscription management links to App Store settings (the "Manage in App Store" button)
 
 #### Edge Cases to Verify
@@ -257,7 +257,7 @@ The backend has 3 processes that need to run: the **API server**, the **ARQ work
 
 ### Option A: VPS / VM (e.g. DigitalOcean, Hetzner, AWS EC2)
 
-Simplest approach — run everything on one machine.
+Simplest approach: run everything on one machine.
 
 #### 1. Server Setup
 
@@ -310,7 +310,7 @@ REDIS_URL=redis://localhost:6379
 QDRANT_HOST=localhost
 QDRANT_PORT=6333
 
-# JWT — generate a random secret
+# JWT: generate a random secret
 JWT_SECRET_KEY=<run: openssl rand -hex 32>
 
 # Google Cloud
@@ -342,7 +342,7 @@ alembic upgrade head
 
 #### 6. PM2 Process Manager
 
-PM2 manages both the API server and worker — auto-restart, log aggregation, and startup on boot.
+PM2 manages both the API server and worker: auto-restart, log aggregation, and startup on boot.
 
 ```bash
 # Install PM2 globally
@@ -545,7 +545,7 @@ Products array is empty. Possible causes:
 ### Receipt Verification Fails
 
 - Check `APPLE_SHARED_SECRET` matches App Store Connect
-- Check `APPLE_IAP_ENVIRONMENT` — sandbox receipts fail on production endpoint and vice versa
+- Check `APPLE_IAP_ENVIRONMENT`: sandbox receipts fail on production endpoint and vice versa
 - Backend automatically falls back to sandbox if production returns status 21007
 
 ### Webhook Not Received

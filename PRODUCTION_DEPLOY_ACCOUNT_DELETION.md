@@ -1,4 +1,4 @@
-# Production Deployment — Account Deletion + Permission Strings
+# Production Deployment: Account Deletion + Permission Strings
 
 ## Architecture
 

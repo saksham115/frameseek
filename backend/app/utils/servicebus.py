@@ -1,4 +1,4 @@
-"""Azure Service Bus — durable job queue that triggers the worker Container Apps Job.
+"""Azure Service Bus: durable job queue that triggers the worker Container Apps Job.
 
 Replaces the ARQ/Redis enqueue. Messages are small JSON envelopes {type, ...ids}. When
 SERVICE_BUS_FQDN is unset (local dev), jobs run inline in a background task so the app
@@ -45,7 +45,7 @@ async def enqueue(body: dict) -> None:
     if settings.SERVICE_BUS_FQDN:
         await _send(body)
     else:
-        logger.info("SERVICE_BUS_FQDN unset — running job inline (dev mode)")
+        logger.info("SERVICE_BUS_FQDN unset: running job inline (dev mode)")
         asyncio.create_task(_run_inline(body))
 
 

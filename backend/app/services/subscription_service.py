@@ -1,6 +1,6 @@
-"""Billing — Stripe subscriptions (replaces Apple/Google IAP).
+"""Billing: Stripe subscriptions (replaces Apple/Google IAP).
 
-Entitlement always comes from Stripe webhooks with verified signatures — the client is
+Entitlement always comes from Stripe webhooks with verified signatures: the client is
 never trusted (this closes the forgeable-receipt and forgeable-Apple-webhook findings).
 """
 

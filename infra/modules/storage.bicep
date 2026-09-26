@@ -1,4 +1,4 @@
-// Blob Storage — replaces GCS. Videos, frames and clips live in one account with
+// Blob Storage: replaces GCS. Videos, frames and clips live in one account with
 // separate containers. Browser uploads go direct-to-blob via user-delegation SAS.
 param location string
 param tags object

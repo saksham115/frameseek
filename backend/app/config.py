@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 def _load_keyvault_into_env() -> None:
     """If AZURE_KEY_VAULT_URI is set, overlay named secrets into the environment before
-    Settings is constructed. Uses managed identity (DefaultAzureCredential) — no key files.
+    Settings is constructed. Uses managed identity (DefaultAzureCredential), so no key files.
     Env vars that are already set win, so local .env development is unaffected.
     """
     vault_uri = os.getenv("AZURE_KEY_VAULT_URI")

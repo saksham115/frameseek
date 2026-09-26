@@ -1,9 +1,9 @@
-"""Multimodal embeddings — Azure AI Vision (replaces Vertex AI).
+"""Multimodal embeddings: Azure AI Vision (replaces Vertex AI).
 
 Same image/text shared vector space as before, so frames embedded as images can be
 retrieved by a text query. The Image Analysis 4.0 multimodal-embeddings REST API
 (``vectorizeImage`` / ``vectorizeText``) returns 1024-dim vectors. Auth via managed
-identity (Cognitive Services User) — no API keys.
+identity (Cognitive Services User), so no API keys.
 """
 
 from __future__ import annotations

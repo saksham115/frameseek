@@ -1,4 +1,4 @@
-// Azure Database for PostgreSQL Flexible Server — managed backups (fixes the no-backup
+// Azure Database for PostgreSQL Flexible Server: managed backups (fixes the no-backup
 // finding), VNet-private, with pgvector enabled (replaces Qdrant).
 param location string
 param tags object

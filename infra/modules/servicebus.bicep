@@ -1,4 +1,4 @@
-// Service Bus — durable queue that triggers the worker Container Apps Job.
+// Service Bus: durable queue that triggers the worker Container Apps Job.
 // Dead-lettering gives us the stale-job safety net the old ARQ pipeline lacked.
 param location string
 param tags object

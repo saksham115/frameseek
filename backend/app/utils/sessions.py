@@ -1,4 +1,4 @@
-"""Refresh-token allowlist in Redis — enables real revocation and rotation.
+"""Refresh-token allowlist in Redis: enables real revocation and rotation.
 
 A refresh token is only valid while its jti is present. Rotation deletes the old jti and
 adds a new one; logout/account-deletion deletes it. This is what makes server-side logout

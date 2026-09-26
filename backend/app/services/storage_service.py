@@ -22,7 +22,7 @@ class StorageService:
         return {"used_bytes": used, "limit_bytes": limit, "used_percentage": percentage}
 
     async def update_storage_used(self, user_id: UUID, delta_bytes: int) -> None:
-        # Atomic increment — concurrent uploads/deletes can't lose each other's changes
+        # Atomic increment: concurrent uploads/deletes can't lose each other's changes
         # (fixes the read-modify-write race).
         await self.db.execute(
             text(

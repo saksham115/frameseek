@@ -1,6 +1,6 @@
 // AI Foundry models:
-//  - Azure OpenAI (Whisper transcription) — deployed in openAiLocation (Sweden Central by default).
-//  - Azure AI Vision (multimodal image+text embeddings) — replaces Vertex AI, in the primary region.
+//  - Azure OpenAI (Whisper transcription): deployed in openAiLocation (Sweden Central by default).
+//  - Azure AI Vision (multimodal image+text embeddings): replaces Vertex AI, in the primary region.
 // Both reached via managed identity (Cognitive Services User); no API keys in app config.
 param location string
 param openAiLocation string

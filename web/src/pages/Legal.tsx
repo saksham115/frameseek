@@ -12,7 +12,7 @@ export default function Legal({ kind }: { kind: "terms" | "privacy" }) {
   const doc = kind === "terms" ? TERMS_OF_SERVICE : PRIVACY_POLICY;
   const signedIn = useAuth((s) => s.status === "authenticated");
   useEffect(() => {
-    document.title = `${doc.title} — FrameSeek`;
+    document.title = `${doc.title} | FrameSeek`;
     window.scrollTo(0, 0);
   }, [doc.title]);
   return (

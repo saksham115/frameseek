@@ -30,7 +30,7 @@ export default function TermsGate() {
   });
 
   useEffect(() => {
-    document.title = "Terms & Privacy — FrameSeek";
+    document.title = "Terms & Privacy | FrameSeek";
   }, []);
   useEffect(() => scrollRef.current?.scrollTo({ top: 0 }), [doc]);
 

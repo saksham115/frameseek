@@ -1,6 +1,6 @@
 """Enqueue helpers + scheduled maintenance tasks.
 
-The ARQ worker is gone — processing runs in an event-triggered Container Apps Job
+The ARQ worker is gone: processing runs in an event-triggered Container Apps Job
 (see app/workers/consumer.py) fed by Service Bus. These wrappers keep the enqueue call
 sites (job_service, videos router) unchanged. The cron tasks now run as scheduled
 Container Apps Jobs; `python -m app.workers.worker <task>` invokes one.

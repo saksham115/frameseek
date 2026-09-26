@@ -3,7 +3,7 @@
 A video is sampled every couple of seconds and each sample gets an image embedding. Two
 neighbouring samples from the same shot embed almost identically; across a cut the
 similarity drops. Walking the samples in time order and starting a new shot at each drop
-turns hundreds of near-duplicate frames into a handful of shots — the unit people actually
+turns hundreds of near-duplicate frames into a handful of shots: the unit people actually
 think in when they browse footage or cut a clip.
 
 Nothing is stored: shots are recomputed from pgvector on demand (one windowed query per

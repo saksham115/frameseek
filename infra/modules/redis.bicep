@@ -1,4 +1,4 @@
-// Azure Cache for Redis — rate limiting + SSE job-progress pub/sub.
+// Azure Cache for Redis: rate limiting + SSE job-progress pub/sub.
 param location string
 param tags object
 param namePrefix string

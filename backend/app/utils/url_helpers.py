@@ -1,6 +1,6 @@
 """Object-storage URL resolution.
 
-Always a short-lived SAS URL from Blob Storage — there is no unauthenticated static
+Always a short-lived SAS URL from Blob Storage: there is no unauthenticated static
 media mount anymore (the old ``/storage`` mount was an access-control hole). The local
 path fallback remains only for local dev where Blob isn't configured.
 """

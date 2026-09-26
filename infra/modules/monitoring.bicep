@@ -1,4 +1,4 @@
-// Log Analytics + Application Insights — fixes the "no monitoring / silent worker death" finding.
+// Log Analytics + Application Insights: fixes the "no monitoring / silent worker death" finding.
 param location string
 param tags object
 param namePrefix string

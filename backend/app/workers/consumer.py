@@ -1,4 +1,4 @@
-"""Service Bus consumer — the entrypoint for the worker Container Apps Job.
+"""Service Bus consumer: the entrypoint for the worker Container Apps Job.
 
 KEDA scales this job on queue depth. Each run drains available messages: process each,
 complete on success, dead-letter on failure (Service Bus max-delivery + dead-lettering is

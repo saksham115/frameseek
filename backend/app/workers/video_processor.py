@@ -76,7 +76,7 @@ async def process_video(job_id: str):
             if not source_path or not Path(source_path).exists():
                 raise RuntimeError("Source video is not available for processing")
 
-            # Populate metadata (duration/fps/dimensions) from the source — uploads arrive
+            # Populate metadata (duration/fps/dimensions) from the source: uploads arrive
             # via Blob so this can't happen at upload time anymore.
             try:
                 from app.utils.video_metadata import extract_metadata
@@ -104,7 +104,7 @@ async def process_video(job_id: str):
             )
 
             logger.info(
-                f"[{vid}] Step 1/5: Done — {len(extracted)} frames extracted "
+                f"[{vid}] Step 1/5: Done, {len(extracted)} frames extracted "
                 f"in {time.time() - step_start:.1f}s"
             )
 
@@ -114,7 +114,7 @@ async def process_video(job_id: str):
             video.processing_progress = 30
             await db.commit()
 
-            # Upload frames to Blob if enabled (blocking I/O — run off the event loop)
+            # Upload frames to Blob if enabled (blocking I/O: run off the event loop)
             frame_gcs_paths: dict[int, str] = {}
             if GCSClient.is_enabled():
                 step_start = time.time()
@@ -135,7 +135,7 @@ async def process_video(job_id: str):
 
                 frame_gcs_paths = await asyncio.to_thread(_upload_frames)
                 logger.info(
-                    f"[{vid}] Step 2/5: Done — {len(frame_gcs_paths)} frames uploaded to Blob "
+                    f"[{vid}] Step 2/5: Done, {len(frame_gcs_paths)} frames uploaded to Blob "
                     f"in {time.time() - step_start:.1f}s"
                 )
             else:
@@ -170,7 +170,7 @@ async def process_video(job_id: str):
                 })
 
             logger.info(
-                f"[{vid}] Step 2/5: Done — {len(frame_dicts)} frame records saved "
+                f"[{vid}] Step 2/5: Done, {len(frame_dicts)} frame records saved "
                 f"in {time.time() - step_start:.1f}s"
             )
 
@@ -185,7 +185,7 @@ async def process_video(job_id: str):
             transcript_chunks = []
             await _transcribe_audio(db, video, frame_dicts, transcript_chunks, video_path=source_path)
             logger.info(
-                f"[{vid}] Step 3/5: Done — status={video.transcript_status}, "
+                f"[{vid}] Step 3/5: Done, status={video.transcript_status}, "
                 f"{len(transcript_chunks)} chunks in {time.time() - step_start:.1f}s"
             )
 
@@ -206,7 +206,7 @@ async def process_video(job_id: str):
                 frames=frame_dicts,
             )
             logger.info(
-                f"[{vid}] Step 4/5: Done — {stored} frame embeddings stored "
+                f"[{vid}] Step 4/5: Done, {stored} frame embeddings stored "
                 f"in {time.time() - step_start:.1f}s"
             )
 
@@ -240,7 +240,7 @@ async def process_video(job_id: str):
                     frames=frame_dicts,
                 )
                 logger.info(
-                    f"[{vid}] Step 5/5: Done — {transcript_stored} transcript embeddings "
+                    f"[{vid}] Step 5/5: Done, {transcript_stored} transcript embeddings "
                     f"in {time.time() - step_start:.1f}s"
                 )
             else:
@@ -325,7 +325,7 @@ async def _transcribe_audio(
     max_retries: int = 1,
     video_path: str | None = None,
 ):
-    """Run transcription with retry. Non-blocking — failures don't stop the pipeline."""
+    """Run transcription with retry. Non-blocking: failures don't stop the pipeline."""
     transcriber = AudioTranscriber()
     source_path = video_path or video.file_path
 
@@ -404,7 +404,7 @@ async def _transcribe_audio(
             )
             if attempt < max_retries:
                 continue
-            # Final failure — non-blocking, pipeline continues
+            # Final failure: non-blocking, pipeline continues
             video.transcript_status = "failed"
             video.transcript_error = str(e)[:2000]
             await db.commit()
@@ -451,7 +451,7 @@ async def transcribe_video_standalone(video_id: str):
         )
         await db.commit()
 
-        # Resolve video source — download from GCS if local file is gone
+        # Resolve video source: download from GCS if local file is gone
         video_path = video.file_path
         tmp_dir = None
         try:

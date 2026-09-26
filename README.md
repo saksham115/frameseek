@@ -283,7 +283,7 @@ FrameSeek uses a custom design system built on brand tokens.
 
 ## Storage
 
-FrameSeek supports two storage backends: **local filesystem** (default, for dev) and **Google Cloud Storage** (for production). Both can coexist — old files on local disk continue working while new uploads go to GCS.
+FrameSeek supports two storage backends: **local filesystem** (default, for dev) and **Google Cloud Storage** (for production). Both can coexist. Old files on local disk continue working while new uploads go to GCS.
 
 ### Local Storage (default)
 
@@ -332,11 +332,11 @@ Mobile resolveMediaUrl():
   starts with /storage →  prepend STORAGE_BASE_URL (local dev or old files)
 ```
 
-The `StaticFiles` mount stays — it continues serving existing local files. No data migration is needed.
+The `StaticFiles` mount stays: it continues serving existing local files. No data migration is needed.
 
 ## Development Notes
 
-- **Mock embeddings**: When `GCP_PROJECT_ID` is empty, the embedding service generates deterministic mock vectors. Search still works — results will be random but the full pipeline runs end to end.
+- **Mock embeddings**: When `GCP_PROJECT_ID` is empty, the embedding service generates deterministic mock vectors. Search still works: results will be random but the full pipeline runs end to end.
 - **Vertex AI**: Set `GCP_PROJECT_ID` and authenticate with `gcloud auth application-default login` to use real multimodal embeddings.
 - **Database migrations**: After changing models, run `alembic revision --autogenerate -m "description"` then `alembic upgrade head`.
 - **Mobile API URL**: Configured in `mobile/src/constants/config.ts`. Defaults to `localhost:8000` in dev.

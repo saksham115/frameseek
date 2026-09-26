@@ -1,4 +1,4 @@
-// User-assigned managed identity — replaces the service-account.json key file.
+// User-assigned managed identity: replaces the service-account.json key file.
 // The API and worker both run as this identity and reach Blob/AI/Service Bus/KV via RBAC.
 param location string
 param tags object

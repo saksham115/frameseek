@@ -1,4 +1,4 @@
-// FrameSeek — Azure infrastructure foundation (Phase 0)
+// FrameSeek: Azure infrastructure foundation (Phase 0)
 // Resource-group scoped. Deploy with:
 //   az group create -n rg-frameseek-prod -l westeurope
 //   az deployment group create -g rg-frameseek-prod -f infra/main.bicep -p @infra/main.parameters.json

@@ -249,7 +249,7 @@ export default function VideoDetailScreen({ route, navigation }: VideoDetailScre
       contentContainerStyle={styles.content}
       keyboardShouldPersistTaps="handled"
     >
-      {/* Search within video — top */}
+      {/* Search within video: top */}
       {video.status === 'ready' && (
         <View style={styles.searchSection}>
           <SearchBar

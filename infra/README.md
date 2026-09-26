@@ -1,4 +1,4 @@
-# FrameSeek — Azure Infrastructure (Bicep)
+# FrameSeek: Azure Infrastructure (Bicep)
 
 The current deployment uses `production.bicep` and `production-apps.bicep` in
 resource group `frameseek-prod`, Central India. See [DEPLOY.md](../DEPLOY.md) for the
@@ -26,8 +26,8 @@ need, in the EU, with managed identity everywhere (no key files).
 
 ## Region strategy
 
-- **Primary: `westeurope`** — compute, data, storage, AI Vision. Keeps all data in the EU.
-- **`swedencentral` for Azure OpenAI (Whisper)** — widest EU model coverage. Cross-region
+- **Primary: `westeurope`** for compute, data, storage and AI Vision. Keeps all data in the EU.
+- **`swedencentral` for Azure OpenAI (Whisper)**: widest EU model coverage. Cross-region
   calls from the API/worker are fine (transcription latency is non-critical).
 
 **Before first deploy, verify model availability** in the chosen regions:
@@ -37,7 +37,7 @@ need, in the EU, with managed identity everywhere (no key files).
 az cognitiveservices model list -l swedencentral \
   --query "[?model.name=='whisper'].{name:model.name, version:model.version}" -o table
 
-# AI Vision multimodal embeddings (Image Analysis 4.0) is region-gated — confirm westeurope
+# AI Vision multimodal embeddings (Image Analysis 4.0) is region-gated: confirm westeurope
 # supports the 'vectorizeImage'/'vectorizeText' operations before relying on it, else move
 # the Computer Vision account to a supported EU region (e.g. northeurope).
 ```
@@ -62,7 +62,7 @@ az deployment group create -g rg-frameseek-prod \
   -p postgresAdminPassword="$(openssl rand -base64 24)"
 ```
 
-Pass `postgresAdminPassword` on the command line (or via a Key Vault reference) — never commit it.
+Pass `postgresAdminPassword` on the command line (or via a Key Vault reference): never commit it.
 
 ## Post-deploy steps
 

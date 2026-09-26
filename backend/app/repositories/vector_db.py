@@ -1,4 +1,4 @@
-"""Vector store — pgvector in Postgres (replaces Qdrant).
+"""Vector store: pgvector in Postgres (replaces Qdrant).
 
 Keeps the ``VectorDB`` surface (create_collection/upsert_embeddings/search/
 delete_by_video_id/delete_collection, plus ``EmbeddingPoint``/``SearchResult``/

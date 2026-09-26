@@ -55,7 +55,7 @@ class SearchService:
             from fastapi import HTTPException, status
             raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Monthly search quota exceeded")
 
-        # Semantic search via pgvector — visual frames only
+        # Semantic search via pgvector: visual frames only
         try:
             query_vector = await self.embedding_service.generate_text_embedding(request.query)
         except EmbeddingUnavailableError as exc:

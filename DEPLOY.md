@@ -1,4 +1,4 @@
-# FrameSeek — Deploy & Test
+# FrameSeek: Deploy & Test
 
 Two tracks: a **local dev loop** for fast iteration, and a **full Azure deploy**.
 

@@ -1,4 +1,4 @@
-"""Object storage client — Azure Blob Storage.
+"""Object storage client: Azure Blob Storage.
 
 Kept at this module path with the class name ``GCSClient`` so the ~15 existing call
 sites (routers, services, workers) keep working unchanged through the GCP→Azure swap.
@@ -84,7 +84,7 @@ class GCSClient:
         prefix, _, rest = path.partition("/")
         container = _PREFIX_TO_CONTAINER.get(prefix)
         if container is None:
-            # Unknown prefix — treat the whole path as living in the videos container.
+            # Unknown prefix: treat the whole path as living in the videos container.
             return settings.BLOB_CONTAINER_VIDEOS, path
         return container, rest
 

@@ -17,7 +17,7 @@ export default function FrameSeekIcon({ size = 32 }: FrameSeekIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 48 48" fill="none">
       <Rect x="4" y="4" width="40" height="40" rx="10" fill={fillColor} />
-      {/* Corner brackets — 8px inset from rect edges, centered */}
+      {/* Corner brackets: 8px inset from rect edges, centered */}
       <Path
         d="M12 16L12 12L16 12"
         stroke={strokeColor}
@@ -46,7 +46,7 @@ export default function FrameSeekIcon({ size = 32 }: FrameSeekIconProps) {
         strokeLinecap="round"
         strokeLinejoin="round"
       />
-      {/* Play triangle — centroid at (24, 24) */}
+      {/* Play triangle: centroid at (24, 24) */}
       <Polygon points="20,17 20,31 32,24" fill={strokeColor} />
     </Svg>
   );

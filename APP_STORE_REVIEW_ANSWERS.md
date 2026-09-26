@@ -22,7 +22,7 @@ A screen recording captured on a physical device will be provided, demonstrating
 
 FrameSeek is an AI-powered video search app that makes every moment in your videos instantly findable through natural language.
 
-Users upload videos, which are automatically processed — frames are extracted at configurable intervals and converted into high-dimensional semantic embeddings using AI. Users can then search their entire video library by describing what they're looking for in plain English (e.g., "sunset on the beach", "person holding a red cup"), and FrameSeek returns matching frames with exact timestamps they can jump to.
+Users upload videos, which are automatically processed: frames are extracted at configurable intervals and converted into high-dimensional semantic embeddings using AI. Users can then search their entire video library by describing what they're looking for in plain English (e.g., "sunset on the beach", "person holding a red cup"), and FrameSeek returns matching frames with exact timestamps they can jump to.
 
 **Problem it solves:** Scrubbing through hours of video to find a specific moment is time-consuming and frustrating. FrameSeek eliminates this by enabling instant, natural language search across an entire video library.
 
@@ -34,18 +34,18 @@ Users upload videos, which are automatically processed — frames are extracted 
 
 **Authentication:** The app supports Sign in with Apple, Google Sign-In, and a Demo Login for review purposes.
 
-**Recommended method for App Review — Demo Login (no third-party auth required):**
+**Recommended method for App Review: Demo Login (no third-party auth required)**
 
 1. Launch the app
 2. Tap **"Demo Login"** at the bottom of the login screen
-3. This signs in automatically with the demo account — no external authentication, no verification codes
+3. This signs in automatically with the demo account: no external authentication, no verification codes
 
-**Alternative — Sign in with Apple:**
+**Alternative: Sign in with Apple**
 
 1. Launch the app and tap **"Sign in with Apple"**
 2. Authenticate with any Apple ID
 
-**Alternative — Google Sign-In:**
+**Alternative: Google Sign-In**
 
 - **Test Email:** saksham115test@gmail.com
 - **Test Password:** testing@1850
@@ -58,7 +58,7 @@ Users upload videos, which are automatically processed — frames are extracted 
 6. **Search:** Once processed, use the search bar to type a natural language description (e.g., "person walking", "blue sky"). Results show matching frames with timestamps
 7. **Create a clip:** Tap on a search result and use the clip creation feature to generate a clip with a start and end time
 8. **Subscriptions:** Navigate to Settings > Plan to view the paywall with Free, Pro ($6.99/mo), and Pro Max ($14.99/mo) plans
-9. **Account deletion:** Navigate to Settings > scroll to bottom > "Delete Account" — confirms with an alert before permanently deleting the account and all associated data
+9. **Account deletion:** Navigate to Settings > scroll to bottom > "Delete Account", which confirms with an alert before permanently deleting the account and all associated data
 10. **Sign out:** Settings > "Sign Out"
 
 ---
@@ -67,11 +67,11 @@ Users upload videos, which are automatically processed — frames are extracted 
 
 | Service | Purpose |
 |---------|---------|
-| **Sign in with Apple** | User authentication — primary login option per App Store guidelines |
-| **Google OAuth 2.0** | User authentication — alternative login via Google Sign-In |
+| **Sign in with Apple** | User authentication: primary login option per App Store guidelines |
+| **Google OAuth 2.0** | User authentication: alternative login via Google Sign-In |
 | **Google Vertex AI (Multimodal Embeddings)** | Converts extracted video frames into 1408-dimensional semantic vectors for natural language search |
 | **Google Cloud Storage** | Stores uploaded videos, extracted frames, thumbnails, and generated clips |
-| **OpenAI Whisper** | Automatic speech recognition — generates video transcripts for enhanced search |
+| **OpenAI Whisper** | Automatic speech recognition: generates video transcripts for enhanced search |
 | **Qdrant** | Self-hosted vector database for storing and querying frame embeddings |
 | **Apple StoreKit / In-App Purchase v2** | Subscription management, receipt validation, and Apple Server Notifications v2 for renewal/cancellation events |
 | **PostgreSQL** | Primary database for user accounts, video metadata, subscriptions, and search history |
@@ -91,7 +91,7 @@ FrameSeek does not operate in a highly regulated industry. The app is a general-
 
 ---
 
-## 7. Guideline 2.1(b) — Business Model
+## 7. Guideline 2.1(b): Business Model
 
 **1. Who are the users that will use the paid services in the app?**
 
@@ -99,7 +99,7 @@ All users of FrameSeek can access paid subscription tiers. Our users are content
 
 **2. Where can users purchase the services that can be accessed in the app?**
 
-All paid subscriptions are purchased exclusively through Apple In-App Purchase (StoreKit 2) within the app. There is no external purchase mechanism — the App Store is the sole point of sale.
+All paid subscriptions are purchased exclusively through Apple In-App Purchase (StoreKit 2) within the app. There is no external purchase mechanism: the App Store is the sole point of sale.
 
 **3. What specific types of previously purchased services can a user access in the app?**
 
@@ -115,12 +115,12 @@ None. All paid features are unlocked exclusively through Apple In-App Purchase. 
 
 ---
 
-## 8. Guideline 4.8 — Sign in with Apple
+## 8. Guideline 4.8: Sign in with Apple
 
 The app now offers **Sign in with Apple** as the primary login option on the login screen. It meets all requirements:
 
 - **Limits data collection** to the user's name and email address only
 - **Allows users to keep their email private** via Apple's private email relay
-- **Does not collect interactions for advertising** — FrameSeek has no advertising and does not share user data with any advertising services
+- **Does not collect interactions for advertising**: FrameSeek has no advertising and does not share user data with any advertising services
 
 Sign in with Apple is displayed prominently above Google Sign-In on the login screen.
