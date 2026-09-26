@@ -43,6 +43,9 @@ import { formatClipTime, type ClipRange } from "@/lib/clip-time";
 import VideoActionsMenu, { useVideoMutations } from "@/components/VideoActions";
 import { apiErrorMessage, errorStatus } from "@/lib/errors";
 import { parseClipParam, shotAt, shotClipRange } from "@/lib/shots";
+import RequestMoreSearches from "@/components/RequestMoreSearches";
+
+const QUOTA_EXHAUSTED = "quota-exhausted";
 import "@/clip-tools.css";
 
 export default function VideoDetail() {
@@ -315,9 +318,10 @@ export default function VideoDetail() {
     try {
       setMatches(await search(query.trim(), id));
     } catch (e) {
+      if (errorStatus(e) === 429) qc.invalidateQueries({ queryKey: ["search-quota"] });
       setSearchError(
         errorStatus(e) === 429
-          ? "You’ve used all your searches for this month."
+          ? QUOTA_EXHAUSTED
           : "Search is temporarily unavailable. Please try again.",
       );
     } finally {
@@ -868,9 +872,15 @@ export default function VideoDetail() {
                 </p>
               )}
               {searchError && (
-                <p role="alert" className="text-destructive text-xs mt-5">
-                  {searchError}
-                </p>
+                searchError === QUOTA_EXHAUSTED ? (
+                  <div className="mt-5">
+                    <RequestMoreSearches compact onGranted={() => runSearch()} />
+                  </div>
+                ) : (
+                  <p role="alert" className="text-destructive text-xs mt-5">
+                    {searchError}
+                  </p>
+                )
               )}
               {isSearching && (
                 <div

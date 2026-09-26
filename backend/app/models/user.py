@@ -20,8 +20,11 @@ class User(Base):
     plan_type: Mapped[str] = mapped_column(String(20), default="free")
     storage_used_bytes: Mapped[int] = mapped_column(BigInteger, default=0)
     storage_limit_bytes: Mapped[int] = mapped_column(BigInteger, default=5368709120)  # 5GB
-    monthly_search_limit: Mapped[int] = mapped_column(Integer, default=20)
+    monthly_search_limit: Mapped[int] = mapped_column(Integer, default=50)
     monthly_search_count: Mapped[int] = mapped_column(Integer, default=0)
+    # "Request more" top-ups for the current month (reset with monthly_search_count).
+    search_bonus: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    search_bonus_requests: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
     search_count_reset_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
 
     retention_days: Mapped[int] = mapped_column(Integer, default=15)

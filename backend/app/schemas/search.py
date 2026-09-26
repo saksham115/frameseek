@@ -33,9 +33,15 @@ class SearchResultItem(BaseModel):
 
 class SearchQuota(BaseModel):
     used: int
+    # Effective limit this month: the plan's limit plus any "Request more" top-ups.
     limit: int
     remaining: int
     resets_at: datetime | None = None
+    bonus_searches: int = 0
+    requests_used: int = 0
+    requests_max: int = 0
+    # True only on the Free plan, with searches used up and top-ups left this month.
+    can_request_more: bool = False
 
 
 class SearchResponse(BaseModel):

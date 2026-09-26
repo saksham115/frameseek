@@ -9,5 +9,6 @@ from app.models.transcript import TranscriptSegment
 from app.models.subscription import Subscription
 from app.models.account_deletion_feedback import AccountDeletionFeedback
 from app.models.user_feedback import UserFeedback
+from app.models.search_quota_request import SearchQuotaRequest
 
-__all__ = ["User", "Video", "Frame", "Job", "Folder", "SearchHistory", "UserAnalytics", "Clip", "TranscriptSegment", "Subscription", "AccountDeletionFeedback", "UserFeedback"]
+__all__ = ["User", "Video", "Frame", "Job", "Folder", "SearchHistory", "UserAnalytics", "Clip", "TranscriptSegment", "Subscription", "AccountDeletionFeedback", "UserFeedback", "SearchQuotaRequest"]

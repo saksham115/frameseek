@@ -19,7 +19,7 @@ class PlanConfig:
 
 
 PLAN_CONFIGS: dict[PlanType, PlanConfig] = {
-    PlanType.FREE: PlanConfig("Free", 5 * 1024**3, 20, 15),
+    PlanType.FREE: PlanConfig("Free", 5 * 1024**3, 50, 15),
     PlanType.PRO: PlanConfig("Pro", 20 * 1024**3, 100, 90),
     PlanType.PRO_MAX: PlanConfig("Pro Max", 50 * 1024**3, 500, 90),
 }

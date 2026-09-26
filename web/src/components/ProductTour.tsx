@@ -22,17 +22,17 @@ const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigat
 const STEPS: Step[] = [
   {
     title: "Welcome to FrameSeek",
-    body: "Here’s a one-minute tour of the essentials. You can skip it any time and replay it later from Settings.",
+    body: "Here’s a tour of the essentials. You can skip it, and replay it later from Settings.",
     visual: "welcome",
   },
   {
     target: "nav-library",
     title: "Your media library",
-    body: "Everything you import lives here. Filter by status, find videos by title, and group them into folders.",
+    body: "Everything you import lives here.",
   },
   {
     target: "nav-import",
-    title: "Bring your footage in",
+    title: "Bring your content in",
     body: "Upload MP4, MOV or WebM files, several at a time. Uploads keep going while you work elsewhere, then we index every frame and transcribe the speech.",
   },
   {
@@ -48,16 +48,16 @@ const STEPS: Step[] = [
   {
     target: "storage",
     title: "Keep an eye on space",
-    body: "Your plan’s storage and how much you’ve used. We’ll warn you before it fills up.",
+    body: "Your plan’s storage and how much you’ve used. We’ll alert you before it fills up.",
   },
   {
     target: "feedback",
     title: "Tell us what you think",
-    body: "Ideas, problems, anything else: send it here whenever you like. It goes straight to the FrameSeek team.",
+    body: "Ideas, issues and new features: send them here. They go straight to the FrameSeek team.",
   },
   {
     title: "You’re all set",
-    body: "Start by importing a video. Processing takes a few minutes, then everything is searchable.",
+    body: "Start by importing a video. Once it’s processed, everything in it is searchable.",
   },
 ];
 

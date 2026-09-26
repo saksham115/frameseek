@@ -26,6 +26,7 @@ import { errorStatus } from "@/lib/errors";
 import { formatTimestamp } from "@/lib/format";
 import { SEARCH_INPUT_ID } from "@/lib/navigation";
 import { clipParam } from "@/lib/shots";
+import RequestMoreSearches from "@/components/RequestMoreSearches";
 
 const SUGGESTIONS = [
   "A person by the ocean",
@@ -122,6 +123,7 @@ export default function Search() {
     isFetching: isPending,
     isError,
     error,
+    refetch,
   } = useQuery({
     queryKey: ["search", submitted],
     queryFn: async () => {
@@ -149,13 +151,19 @@ export default function Search() {
   }, [history]);
   const outOfSearches = !!quota && quota.limit >= 0 && quota.remaining <= 0;
 
+  const quotaError = errorStatus(error) === 429;
   const run = (q: string) => {
     const text = q.trim();
     if (!text || isPending) return;
     setQuery(text);
-    setParams({ q: text });
+    // Same query as a failed run (e.g. before more searches were granted): try it again.
+    if (text === submitted && isError) refetch();
+    else setParams({ q: text });
   };
-  const quotaError = errorStatus(error) === 429;
+  // A 429 means our cached quota is stale; refresh it so "Request more" can appear.
+  useEffect(() => {
+    if (quotaError) qc.invalidateQueries({ queryKey: ["search-quota"] });
+  }, [quotaError, qc]);
 
   return (
     <div className="search-page">
@@ -247,11 +255,12 @@ export default function Search() {
         )}
       </div>
       {(outOfSearches || quotaError) && (
-        <div className="error-state quota-state" role="alert">
-          You’ve used all {quota?.limit ?? ""} searches for this month. They
-          reset on {quota ? resetLabel(quota) : "the 1st"}. Search results you’ve
-          already run on this page stay available.
-        </div>
+        <RequestMoreSearches
+          onGranted={() => {
+            // Finish the search that was blocked.
+            if (quotaError && submitted) refetch();
+          }}
+        />
       )}
       {isError && !quotaError && (
         <div className="error-state" role="alert">

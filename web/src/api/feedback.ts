@@ -1,6 +1,6 @@
 import { api } from "./client";
 
-export type FeedbackCategory = "idea" | "problem" | "other";
+export type FeedbackCategory = "idea" | "issue" | "feature";
 
 export async function sendFeedback(input: {
   category: FeedbackCategory;

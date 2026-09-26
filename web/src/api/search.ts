@@ -7,6 +7,17 @@ export interface SearchQuota {
   limit: number;
   remaining: number;
   resets_at: string | null;
+  bonus_searches?: number;
+  requests_used?: number;
+  requests_max?: number;
+  /** Free plan, searches used up, and "Request more" still available this month. */
+  can_request_more?: boolean;
+}
+
+/** Free plan: once searches run out, grants 10 more (up to 3 times a month). */
+export async function requestMoreSearches(): Promise<SearchQuota> {
+  const { data } = await api.post<SearchQuota>("/search/quota/request-more");
+  return data;
 }
 
 export interface SearchResult {

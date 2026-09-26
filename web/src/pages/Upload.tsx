@@ -88,7 +88,7 @@ export default function Upload() {
     <div>
       <PageHeader
         eyebrow="START SOMETHING GOOD"
-        title="Bring your footage in."
+        title="Bring your content in."
         description="Add one video or a whole batch. Uploads keep going while you work elsewhere in FrameSeek."
       />
       <div className="upload-layout">

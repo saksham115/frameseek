@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field, field_validator
 
 
 class FeedbackCreate(BaseModel):
-    category: Literal["idea", "problem", "other"] = "other"
+    category: Literal["idea", "issue", "feature"] = "idea"
     message: str = Field(min_length=1, max_length=2000)
     # The in-app path the user was on, e.g. "/videos/…"; helps us reproduce problems.
     page: str | None = Field(default=None, max_length=500)

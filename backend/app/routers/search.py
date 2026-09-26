@@ -43,3 +43,12 @@ async def search_quota(
     service = SearchService(db)
     quota = await service.get_quota(user.user_id)
     return ApiResponse(data=quota)
+
+
+@router.post("/quota/request-more", response_model=ApiResponse[SearchQuota])
+async def request_more_searches(
+    user: User = Depends(get_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Free plan only: once searches run out, grant 10 more (up to 3 times a month)."""
+    return ApiResponse(data=await SearchService(db).request_more(user.user_id))

@@ -68,8 +68,8 @@ class TestFeedbackIsLogged:
     async def test_emitted_for_app_insights(self, client, test_user, caplog):
         # No caplog.at_level: the record must get through on the logger's own level, since
         # production leaves the root logger at its WARNING default.
-        await client.post(URL, headers=test_user["headers"], json={"category": "problem", "message": "Search is slow"})
+        await client.post(URL, headers=test_user["headers"], json={"category": "issue", "message": "Search is slow"})
         records = [r for r in caplog.records if r.name == "app.feedback"]
         assert len(records) == 1
         assert "Search is slow" in records[0].getMessage()
-        assert records[0].custom_dimensions["category"] == "problem"
+        assert records[0].custom_dimensions["category"] == "issue"

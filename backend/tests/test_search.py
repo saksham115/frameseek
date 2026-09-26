@@ -174,8 +174,9 @@ class TestSearchQuota:
         assert resp.status_code == 200
         data = resp.json()["data"]
         assert data["used"] == 0
-        assert data["limit"] == 20
-        assert data["remaining"] == 20
+        assert data["limit"] == 50
+        assert data["remaining"] == 50
+        assert data["can_request_more"] is False
 
     async def test_quota_after_searches(self, client, db_session, test_user):
         user = test_user["user"]
@@ -187,7 +188,7 @@ class TestSearchQuota:
         resp = await client.get(f"{URL}/quota", headers=test_user["headers"])
         data = resp.json()["data"]
         assert data["used"] == 10
-        assert data["remaining"] == 10
+        assert data["remaining"] == 40
 
     async def test_quota_monthly_reset(self, client, db_session, test_user):
         user = test_user["user"]
@@ -199,15 +200,15 @@ class TestSearchQuota:
         resp = await client.get(f"{URL}/quota", headers=test_user["headers"])
         data = resp.json()["data"]
         assert data["used"] == 0
-        assert data["remaining"] == 20
+        assert data["remaining"] == 50
 
     async def test_quota_does_not_reset_within_month(self, client, db_session, test_user):
         user = test_user["user"]
-        user.monthly_search_count = 20
+        user.monthly_search_count = 50
         user.search_count_reset_at = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         await db_session.commit()
 
         resp = await client.post(URL, json={"query": "over limit"}, headers=test_user["headers"])
         assert resp.status_code == 429
         await db_session.refresh(user)
-        assert user.monthly_search_count == 20
+        assert user.monthly_search_count == 50

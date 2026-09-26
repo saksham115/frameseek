@@ -2,11 +2,13 @@ import time
 from datetime import datetime, timezone
 from uuid import UUID
 
+from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.search_history import SearchHistory
 from app.models.user import User
+from app.models.search_quota_request import SearchQuotaRequest
 from app.models.video import Video
 from app.repositories.vector_db import vector_db
 from app.schemas.search import SearchQuota, SearchRequest, SearchResponse, SearchResultItem
@@ -18,6 +20,28 @@ from app.utils.gcs_client import GCSClient
 
 
 _SHOT_OVERFETCH = 3
+
+# "Request more" on the Free plan: searches granted per request, and requests per month.
+REQUEST_MORE_SEARCHES = 10
+REQUEST_MORE_MAX = 3
+
+
+def _quota_for(user: User) -> SearchQuota:
+    if user.monthly_search_limit < 0:
+        return SearchQuota(used=user.monthly_search_count, limit=-1, remaining=-1, resets_at=user.search_count_reset_at)
+    limit = user.monthly_search_limit + user.search_bonus
+    remaining = max(0, limit - user.monthly_search_count)
+    free = user.plan_type == "free"
+    return SearchQuota(
+        used=user.monthly_search_count,
+        limit=limit,
+        remaining=remaining,
+        resets_at=user.search_count_reset_at,
+        bonus_searches=user.search_bonus,
+        requests_used=user.search_bonus_requests,
+        requests_max=REQUEST_MORE_MAX if free else 0,
+        can_request_more=free and remaining == 0 and user.search_bonus_requests < REQUEST_MORE_MAX,
+    )
 
 
 def collapse_into_shots(
@@ -142,25 +166,54 @@ class SearchService:
         )
         user = result.scalar_one_or_none()
         if not user:
-            return SearchQuota(used=0, limit=20, remaining=20)
+            return SearchQuota(used=0, limit=0, remaining=0)
+        await self._reset_if_new_month(user)
+        return _quota_for(user)
 
-        # Reset if new month
+    async def request_more(self, user_id: UUID) -> SearchQuota:
+        """Grant a Free-plan user REQUEST_MORE_SEARCHES more searches once they've run out,
+        at most REQUEST_MORE_MAX times a month. Each grant is logged."""
+        # Row lock: two quick clicks can't both pass the "fewer than 3" check.
+        result = await self.db.execute(
+            select(User).where(User.user_id == user_id).with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        user = result.scalar_one_or_none()
+        if not user:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        await self._reset_if_new_month(user)
+        quota = _quota_for(user)
+        if user.plan_type != "free" or user.monthly_search_limit < 0:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Extra searches are only available on the Free plan.")
+        if quota.remaining > 0:
+            raise HTTPException(status.HTTP_409_CONFLICT, "You still have searches left this month.")
+        if user.search_bonus_requests >= REQUEST_MORE_MAX:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                f"You've already requested more searches {REQUEST_MORE_MAX} times this month.",
+            )
+
+        user.search_bonus += REQUEST_MORE_SEARCHES
+        user.search_bonus_requests += 1
+        self.db.add(SearchQuotaRequest(
+            user_id=user.user_id,
+            plan_type=user.plan_type,
+            searches_granted=REQUEST_MORE_SEARCHES,
+            request_number=user.search_bonus_requests,
+        ))
+        await self.db.flush()
+        return _quota_for(user)
+
+    async def _reset_if_new_month(self, user: User) -> None:
         now = datetime.now(timezone.utc)
         if not user.search_count_reset_at or (
             user.search_count_reset_at.year, user.search_count_reset_at.month
         ) < (now.year, now.month):
             user.monthly_search_count = 0
+            user.search_bonus = 0
+            user.search_bonus_requests = 0
             user.search_count_reset_at = now
             await self.db.flush()
-
-        limit = user.monthly_search_limit
-
-        return SearchQuota(
-            used=user.monthly_search_count,
-            limit=limit,
-            remaining=max(0, limit - user.monthly_search_count),
-            resets_at=user.search_count_reset_at,
-        )
 
     async def get_history(self, user_id: UUID, limit: int = 20) -> list[SearchHistory]:
         result = await self.db.execute(
@@ -194,7 +247,7 @@ class SearchService:
             text(
                 "UPDATE users SET monthly_search_count = monthly_search_count + 1 "
                 "WHERE user_id = :uid AND (monthly_search_limit = -1 "
-                "OR monthly_search_count < monthly_search_limit)"
+                "OR monthly_search_count < monthly_search_limit + search_bonus)"
             ),
             {"uid": str(user_id)},
         )

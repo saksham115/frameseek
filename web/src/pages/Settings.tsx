@@ -143,7 +143,7 @@ export default function Settings() {
             <Compass size={16} className="text-primary" />
             <h2>Product tour</h2>
           </div>
-          <p>A one-minute walkthrough of importing, searching and clipping.</p>
+          <p>A walkthrough of importing, searching and clipping.</p>
         </div>
         <Button
           variant="outline"

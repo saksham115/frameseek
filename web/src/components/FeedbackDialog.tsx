@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useLocation } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
-import { Bug, CheckCircle2, Lightbulb, MessageSquare, MessageSquarePlus, Send } from "lucide-react";
+import { Bug, CheckCircle2, Lightbulb, MessageSquarePlus, Send, Sparkles } from "lucide-react";
 import { sendFeedback, type FeedbackCategory } from "@/api/feedback";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,8 +18,8 @@ import { cn } from "@/lib/utils";
 const MAX = 2000;
 const CATEGORIES: { id: FeedbackCategory; label: string; icon: typeof Lightbulb; hint: string }[] = [
   { id: "idea", label: "Idea", icon: Lightbulb, hint: "What would make FrameSeek better for you?" },
-  { id: "problem", label: "Problem", icon: Bug, hint: "What went wrong, and what did you expect?" },
-  { id: "other", label: "Other", icon: MessageSquare, hint: "Tell us anything on your mind." },
+  { id: "issue", label: "Issue", icon: Bug, hint: "What went wrong, and what did you expect?" },
+  { id: "feature", label: "New feature", icon: Sparkles, hint: "What would you like FrameSeek to do?" },
 ];
 
 /** One-way feedback to the FrameSeek team, opened from the top bar. */

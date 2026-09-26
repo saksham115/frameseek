@@ -47,7 +47,7 @@ export const TERMS_OF_SERVICE: LegalDocument = {
     {
       heading: "5. Plans, limits and retention",
       body: [
-        "Each plan has storage and monthly search limits. The Free plan includes 5 GB of storage and 20 visual searches a month; paid plan limits are shown on the Plans page.",
+        "Each plan has storage and monthly search limits. The Free plan includes 5 GB of storage and 50 visual searches a month. If you run out, you can request 10 more, up to three times a month. Paid plan limits are shown on the Plans page.",
         "Videos may be deleted automatically after your plan’s retention period: 15 days after upload on the Free plan and 90 days on paid plans. Keep your own copy of anything you need.",
         "We may change limits with reasonable notice.",
       ],
