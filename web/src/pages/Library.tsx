@@ -166,7 +166,7 @@ export default function Library() {
       <PageHeader
         eyebrow="YOUR WORKSPACE"
         title="Media library"
-        description="A home for your footage. A starting point for your next story."
+        description="A home for your content. A starting point for your next story."
         action={
           <Button
             className="studio-button"
@@ -252,7 +252,7 @@ export default function Library() {
           </span>
         </span>
         <span>
-          {isFetching && !isLoading ? "Updating…" : "Your footage, in focus"}
+          {isFetching && !isLoading ? "Updating…" : "Your content, in focus"}
         </span>
       </div>
       {isError ? (
@@ -609,7 +609,7 @@ function FolderBar({
               <DialogDescription>
                 {dialog?.mode === "rename"
                   ? "Videos in this folder stay where they are."
-                  : "Group related footage so it’s easy to come back to."}
+                  : "Group related content so it’s easy to come back to."}
               </DialogDescription>
             </DialogHeader>
             <input

@@ -20,7 +20,7 @@ export default function Login() {
         <div className="login-manifesto">
           <p className="eyebrow">FOR THE MOMENTS WORTH FINDING</p>
           <h1>
-            Your footage.
+            Your content.
             <br />A world of
             <br />
             <span>possibilities.</span>
