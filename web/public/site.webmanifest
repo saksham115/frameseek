@@ -1,0 +1,14 @@
+{
+  "name": "FrameSeek",
+  "short_name": "FrameSeek",
+  "description": "AI video search: find any moment in your videos by describing it.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#141915",
+  "theme_color": "#141915",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

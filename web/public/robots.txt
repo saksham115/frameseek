@@ -1,0 +1,12 @@
+# FrameSeek web app. The public pages are the sign-in page, Terms and Privacy;
+# everything else needs an account, so crawlers only ever see the sign-in page there.
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /videos/
+Disallow: /search
+Disallow: /settings
+Disallow: /upgrade
+Disallow: /upload
+
+Sitemap: https://app.frameseek.in/sitemap.xml

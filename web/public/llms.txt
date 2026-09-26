@@ -1,0 +1,61 @@
+# FrameSeek
+
+> FrameSeek is an AI video search web app. You upload your videos, describe a moment in plain words (for example "golden hour on the beach"), and jump straight to it. It also groups similar-looking frames into shots, transcribes speech, and exports clips as MP4.
+
+- App: https://app.frameseek.in/
+- Website: https://frameseek.in/
+- Terms of Service: https://app.frameseek.in/terms
+- Privacy Policy: https://app.frameseek.in/privacy
+
+## What it does
+
+- Visual search: describe a scene, object, colour or action and get the matching moments across your library, best matches first, grouped by video and shot.
+- Shots: consecutive frames that look alike are grouped into shots, so browsing a video and choosing a clip happens shot by shot instead of frame by frame.
+- Transcripts: spoken audio is transcribed; you can read the transcript, find words in it, and jump to that point in the video.
+- Clips: pick a shot or set in and out points, preview, and export an MP4 (up to 2 minutes per clip).
+- Library: folders, filters by status, title search, and a video workspace with a shot navigator.
+
+## How it works
+
+1. Sign in with a Google account and accept the Terms of Service and Privacy Policy.
+2. Import MP4, MOV or WebM videos (up to 500 MB each), one at a time or in a batch.
+3. FrameSeek samples frames, creates image embeddings for search, and transcribes the audio.
+4. Search in natural language, open a result at the exact moment, and export a clip.
+
+## Plans
+
+- Free: 5 GB of storage and 50 visual searches a month. If you run out, you can request 10 more searches, up to three times a month. Free-plan videos may be removed 15 days after upload.
+- Paid plans raise the storage and search limits.
+
+## Privacy
+
+- Each library is private to its account; other users can't see or search your videos.
+- FrameSeek doesn't sell your data, show ads, or train AI models on your videos.
+- It runs on Microsoft Azure (hosting, storage, Azure AI Vision for search, Azure OpenAI for transcription). Google provides sign-in; Stripe handles payments for paid plans.
+- You can delete your videos, or your whole account, at any time from the app.
+
+## FAQ
+
+### What is FrameSeek?
+An AI video search app. Instead of scrubbing through footage, you describe what you remember and FrameSeek finds where it happens in your videos.
+
+### How do I find a specific moment in a video?
+Import the video, wait for processing to finish, then type a description of the moment into Visual search. Results open the video at the matching frame.
+
+### Can FrameSeek search what people say in a video?
+Visual search matches what appears on screen. For speech, open the video's Transcript tab, where you can find words and jump to them.
+
+### What video formats does FrameSeek support?
+MP4, MOV and WebM, up to 500 MB per video.
+
+### Can I cut clips from my videos?
+Yes. Select a shot or set in and out points, preview the selection, and export it as an MP4 of up to 2 minutes.
+
+### Is FrameSeek free?
+Yes, there is a Free plan with 5 GB of storage and 50 searches a month, plus up to three requests for 10 extra searches each month.
+
+### Are my videos private?
+Yes. Your library is only visible to your account, media is served through short-lived signed links, and your videos aren't used to train AI models.
+
+### How do I sign in?
+With a Google account at https://app.frameseek.in/.

@@ -9,6 +9,9 @@ import App from "./App";
 import "./index.css";
 
 
+// Crawler-only static text (see index.html); the app renders the real page.
+document.getElementById("prerender")?.remove();
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
