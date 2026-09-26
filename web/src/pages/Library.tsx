@@ -290,7 +290,7 @@ export default function Library() {
                 ? "Import straight into this folder, or move videos here from their ⋯ menu."
                 : narrowed
                   ? "Videos with this status will appear here."
-                  : "Import a video and turn your footage into a searchable workspace."}
+                  : "Import a video and turn your content into a searchable workspace."}
           </p>
           <div className="flex justify-center gap-2 mt-6">
             {narrowed && (

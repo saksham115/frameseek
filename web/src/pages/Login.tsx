@@ -71,7 +71,7 @@ export default function Login() {
             <br />
             next great story.
           </h2>
-          <p>Sign in to bring your footage into focus.</p>
+          <p>Sign in to bring your content into focus.</p>
           <button
             className="google-signin"
             onClick={() => {
