@@ -7,7 +7,8 @@ export interface Pagination {
   total: number;
   total_pages: number;
 }
-export const LIBRARY_PAGE_SIZE = 12;
+// 20 fills whole rows at every grid width (5, 4 or 2 cards per row).
+export const LIBRARY_PAGE_SIZE = 20;
 
 export interface LibraryQuery {
   page?: number;
