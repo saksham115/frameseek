@@ -3330,3 +3330,28 @@ kbd {
   padding: 14px;
   margin: 0;
 }
+
+/* ---- Import dialog ---- */
+.import-dialog-body {
+  max-height: calc(100dvh - 190px);
+  overflow-y: auto;
+  margin: 0 -4px;
+  padding: 0 4px;
+}
+.import-dialog .upload-dropzone {
+  min-height: 0;
+  padding: 36px 20px;
+}
+.import-privacy {
+  margin-top: 16px;
+}
+button.import-tile,
+button.topbar-uploads {
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+button.import-tile {
+  width: 100%;
+  color: inherit;
+}

@@ -67,6 +67,7 @@ import VideoActionsMenu from "@/components/VideoActions";
 import { apiErrorMessage } from "@/lib/errors";
 import { formatBytes, formatTimestamp } from "@/lib/format";
 import { useAuth } from "@/store/auth";
+import { useImportDialog } from "@/store/importDialog";
 import { cn } from "@/lib/utils";
 
 const FILTERS = [
@@ -167,10 +168,12 @@ export default function Library() {
         title="Media library"
         description="A home for your footage. A starting point for your next story."
         action={
-          <Button asChild className="studio-button">
-            <Link to={folderId ? `/upload?folder=${folderId}` : "/upload"}>
-              <Plus /> Import video
-            </Link>
+          <Button
+            className="studio-button"
+            data-tour="import"
+            onClick={() => useImportDialog.getState().show(folderId || null)}
+          >
+            <Plus /> Import video
           </Button>
         }
       />
@@ -309,10 +312,12 @@ export default function Library() {
                 </Link>
               </Button>
             ) : (
-              <Button asChild className="studio-button" variant="outline">
-                <Link to={folderId ? `/upload?folder=${folderId}` : "/upload"}>
-                  <Upload /> Import a video
-                </Link>
+              <Button
+                className="studio-button"
+                variant="outline"
+                onClick={() => useImportDialog.getState().show(folderId || null)}
+              >
+                <Upload /> Import a video
               </Button>
             )}
           </div>
@@ -323,13 +328,17 @@ export default function Library() {
             <VideoCard key={v.id} video={v} />
           ))}
           {view === "grid" && !narrowed && (
-            <Link to="/upload" className="import-tile">
+            <button
+              type="button"
+              className="import-tile"
+              onClick={() => useImportDialog.getState().show()}
+            >
               <div className="import-plus">
                 <Plus size={20} strokeWidth={1.5} />
               </div>
               <strong>Bring in something new</strong>
               <span>Import a video to your library</span>
-            </Link>
+            </button>
           )}
         </div>
       )}

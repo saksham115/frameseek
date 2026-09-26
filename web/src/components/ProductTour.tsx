@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import LogoIcon from "@/components/LogoIcon";
 import { useAuth } from "@/store/auth";
 import { useTour } from "@/store/tour";
+import { useImportDialog } from "@/store/importDialog";
 import { cn } from "@/lib/utils";
 
 interface Step {
@@ -15,7 +16,11 @@ interface Step {
   title: string;
   body: string;
   visual?: "welcome" | "shots";
+  /** Shown when the target isn't on screen (e.g. the sidebar on phones). */
+  hiddenHint?: string;
 }
+
+const MENU_HINT = "You’ll find this in the ☰ menu.";
 
 const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
 
@@ -27,11 +32,13 @@ const STEPS: Step[] = [
   },
   {
     target: "nav-library",
+    hiddenHint: MENU_HINT,
     title: "Your media library",
     body: "Everything you import lives here.",
   },
   {
-    target: "nav-import",
+    target: "import",
+    hiddenHint: "You’ll find the Import video button at the top of your Media library.",
     title: "Bring your content in",
     body: "Upload MP4, MOV or WebM files, several at a time. Uploads keep going while you work elsewhere, then we index every frame and transcribe the speech.",
   },
@@ -47,6 +54,7 @@ const STEPS: Step[] = [
   },
   {
     target: "storage",
+    hiddenHint: MENU_HINT,
     title: "Keep an eye on space",
     body: "Your plan’s storage and how much you’ve used. We’ll alert you before it fills up.",
   },
@@ -211,9 +219,7 @@ export default function ProductTour() {
         </p>
         <h2 id="tour-title">{current.title}</h2>
         <p id="tour-body">{current.body}</p>
-        {current.target && !hole && (
-          <p className="tour-hint">You’ll find this in the ☰ menu.</p>
-        )}
+        {current.hiddenHint && !hole && <p className="tour-hint">{current.hiddenHint}</p>}
         <div className="tour-dots" aria-hidden="true">
           {STEPS.map((_, i) => (
             <span key={i} className={cn(i === step && "active")} />
@@ -234,7 +240,10 @@ export default function ProductTour() {
               <Button variant="outline" className="studio-button" onClick={() => finish()}>
                 Explore first
               </Button>
-              <Button ref={primaryRef} className="studio-button" onClick={() => finish("/upload")}>
+              <Button ref={primaryRef} className="studio-button" onClick={() => {
+                  finish("/");
+                  useImportDialog.getState().show();
+                }}>
                 Import a video <ArrowRight />
               </Button>
             </div>

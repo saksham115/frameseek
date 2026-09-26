@@ -11,7 +11,6 @@ import {
   Menu,
   Search,
   Settings2,
-  Upload,
   UploadCloud,
   X,
 } from "lucide-react";
@@ -23,13 +22,14 @@ import { SEARCH_INPUT_ID, setAppNavigator } from "@/lib/navigation";
 import { isActiveUpload, useUploads } from "@/store/uploads";
 import { useTour } from "@/store/tour";
 import FeedbackDialog from "@/components/FeedbackDialog";
+import ImportDialog from "@/components/ImportDialog";
+import { useImportDialog } from "@/store/importDialog";
 import ProductTour from "@/components/ProductTour";
 import { cn } from "@/lib/utils";
 
 const NAV = [
   { to: "/", label: "Media library", icon: FolderOpen, end: true, tour: "nav-library" },
   { to: "/search", label: "Visual search", icon: Search, end: false, tour: "nav-search" },
-  { to: "/upload", label: "Import media", icon: Upload, end: false, tour: "nav-import" },
 ];
 
 export default function AppShell() {
@@ -45,7 +45,6 @@ export default function AppShell() {
     : ({
         "/": "Media library",
         "/search": "Visual search",
-        "/upload": "Import media",
         "/settings": "Settings",
         "/upgrade": "Plans",
       }[location.pathname] ?? "Workspace");
@@ -311,9 +310,9 @@ export default function AppShell() {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            {uploading && location.pathname !== "/upload" && (
-              <NavLink
-                to="/upload"
+            {uploading && (
+              <button
+                onClick={() => useImportDialog.getState().show()}
                 className="topbar-uploads"
                 aria-label={`${activeUploads.length} uploads in progress, ${uploadPercent}% done`}
               >
@@ -325,7 +324,7 @@ export default function AppShell() {
                 <span className="topbar-uploads-bar" aria-hidden="true">
                   <span style={{ width: `${uploadPercent}%` }} />
                 </span>
-              </NavLink>
+              </button>
             )}
             <FeedbackDialog />
             <button
@@ -357,6 +356,7 @@ export default function AppShell() {
           <Outlet />
         </main>
         <ProductTour />
+        <ImportDialog />
       </div>
     </div>
   );

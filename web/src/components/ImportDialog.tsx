@@ -1,5 +1,5 @@
-import { useRef, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
   ArrowUpRight,
@@ -13,7 +13,14 @@ import {
 import { toast } from "sonner";
 import { listFolders } from "@/api/folders";
 import { Progress } from "@/components/ui/progress";
-import { PageHeader } from "@/components/MediaUI";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { useImportDialog } from "@/store/importDialog";
 import { formatBytes } from "@/lib/format";
 import { useAuth } from "@/store/auth";
 import {
@@ -35,9 +42,13 @@ const STATUS_LABEL: Record<UploadItem["status"], string> = {
   cancelled: "Cancelled",
 };
 
-export default function Upload() {
-  const [params] = useSearchParams();
-  const [folderId, setFolderId] = useState(params.get("folder") ?? "");
+/** Import videos: opened from any Import button; uploads keep running after it closes. */
+export default function ImportDialog() {
+  const { open, folderId: preselected, hide } = useImportDialog();
+  const [folderId, setFolderId] = useState("");
+  useEffect(() => {
+    if (open) setFolderId(preselected ?? "");
+  }, [open, preselected]);
   const [dragging, setDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const user = useAuth((s) => s.user);
@@ -85,14 +96,16 @@ export default function Upload() {
   };
 
   return (
-    <div>
-      <PageHeader
-        eyebrow="START SOMETHING GOOD"
-        title="Bring your content in."
-        description="Add one video or a whole batch. Uploads keep going while you work elsewhere in FrameSeek."
-      />
-      <div className="upload-layout">
-        <div>
+    <Dialog open={open} onOpenChange={(o) => !o && hide()}>
+      <DialogContent className="import-dialog sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Bring your content in</DialogTitle>
+          <DialogDescription>
+            Add one video or a whole batch. Uploads keep going if you close
+            this and carry on working.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="import-dialog-body">
           <div className="upload-options">
             <label htmlFor="upload-folder">Save to</label>
             <select
@@ -181,38 +194,13 @@ export default function Upload() {
               )}
             </div>
           )}
-        </div>
-        <aside className="upload-aside">
-          <h2>A little work behind the scenes.</h2>
-          {[
-            {
-              title: "Make yourself at home",
-              text: "Your original video is stored in your personal library.",
-            },
-            {
-              title: "Let us find the details",
-              text: "We index the visuals and transcribe any spoken audio.",
-            },
-            {
-              title: "Get to the good part",
-              text: "Search your footage and jump to any matching moment.",
-            },
-          ].map((s, i) => (
-            <div className="upload-step" key={s.title}>
-              <span>{i + 1}</span>
-              <div>
-                <h3>{s.title}</h3>
-                <p>{s.text}</p>
-              </div>
-            </div>
-          ))}
-          <div className="upload-privacy">
+          <div className="upload-privacy import-privacy">
             <LockKeyhole size={13} />
             <span>Your library is private to your account.</span>
           </div>
-        </aside>
-      </div>
-    </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -267,7 +255,11 @@ function UploadRow({
         )}
       </div>
       {item.status === "done" && item.videoId && (
-        <Link className="upload-open" to={`/videos/${item.videoId}`}>
+        <Link
+          className="upload-open"
+          to={`/videos/${item.videoId}`}
+          onClick={() => useImportDialog.getState().hide()}
+        >
           Open <ArrowUpRight size={12} />
         </Link>
       )}

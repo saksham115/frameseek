@@ -1,5 +1,6 @@
 import { useEffect } from "react";
-import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { useImportDialog } from "@/store/importDialog";
 import { useAuth } from "@/store/auth";
 import { setAuthFailureHandler, setTermsRequiredHandler } from "@/api/client";
 import AppShell from "@/components/AppShell";
@@ -7,7 +8,6 @@ import LogoIcon from "@/components/LogoIcon";
 import Login from "@/pages/Login";
 import Library from "@/pages/Library";
 import Search from "@/pages/Search";
-import Upload from "@/pages/Upload";
 import VideoDetail from "@/pages/VideoDetail";
 import Settings from "@/pages/Settings";
 import Paywall from "@/pages/Paywall";
@@ -15,6 +15,16 @@ import NotFound from "@/pages/NotFound";
 import Legal from "@/pages/Legal";
 import TermsGate from "@/components/TermsGate";
 import { rememberReturnPath, takeReturnPath } from "@/lib/navigation";
+
+/** Old /upload links: show the library with the Import dialog open. */
+function OpenImportDialog() {
+  const [params] = useSearchParams();
+  const folder = params.get("folder");
+  useEffect(() => {
+    useImportDialog.getState().show(folder);
+  }, [folder]);
+  return <Navigate to={folder ? `/?folder=${folder}` : "/"} replace />;
+}
 
 /** Sends anonymous visitors to sign in, remembering the page they were trying to open. */
 function RedirectToLogin() {
@@ -82,7 +92,7 @@ const App = () => {
       <Route element={<AppShell />}>
         <Route index element={<Library />} />
         <Route path="/search" element={<Search />} />
-        <Route path="/upload" element={<Upload />} />
+        <Route path="/upload" element={<OpenImportDialog />} />
         <Route path="/videos/:id" element={<VideoDetail />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/upgrade" element={<Paywall />} />
