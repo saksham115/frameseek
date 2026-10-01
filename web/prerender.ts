@@ -4,7 +4,9 @@
 // app hides before first paint (see index.html), so people only ever see the app.
 import { build } from "esbuild";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import type { Plugin } from "vite";
 
 const ORIGIN = "https://app.frameseek.in";
@@ -28,11 +30,19 @@ async function loadLegal(root: string) {
     platform: "node",
     write: false,
   });
-  const code = out.outputFiles[0].text;
-  return (await import(`data:text/javascript;base64,${Buffer.from(code).toString("base64")}`)) as {
-    TERMS_OF_SERVICE: LegalDocument;
-    PRIVACY_POLICY: LegalDocument;
-  };
+  // Import from a temp file rather than a data: URL: Bun (which builds the Docker
+  // image) rejects long data: URLs with NameTooLong.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "frameseek-prerender-"));
+  const file = path.join(dir, "legal.mjs");
+  fs.writeFileSync(file, out.outputFiles[0].text);
+  try {
+    return (await import(pathToFileURL(file).href)) as {
+      TERMS_OF_SERVICE: LegalDocument;
+      PRIVACY_POLICY: LegalDocument;
+    };
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 }
 
 const footer = `<footer><nav aria-label="Legal"><a href="/">Sign in</a> · <a href="/terms">Terms of Service</a> · <a href="/privacy">Privacy Policy</a></nav></footer>`;
@@ -107,7 +117,15 @@ export default function prerender(): Plugin {
       outDir = path.resolve(config.root, config.build.outDir);
     },
     async closeBundle() {
-      const { TERMS_OF_SERVICE, PRIVACY_POLICY } = await loadLegal(root);
+      let legal: Awaited<ReturnType<typeof loadLegal>>;
+      try {
+        legal = await loadLegal(root);
+      } catch (e) {
+        // Rethrow as a plain Error: Rollup crashes on Bun's read-only error objects
+        // ("Attempted to assign to readonly property") and hides the real cause.
+        throw new Error(`prerender: couldn't load src/lib/legal.ts: ${(e as Error)?.message ?? e}`);
+      }
+      const { TERMS_OF_SERVICE, PRIVACY_POLICY } = legal;
       const shell = fs.readFileSync(path.join(outDir, "index.html"), "utf8");
       const pages: Page[] = [
         {
