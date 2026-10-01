@@ -120,8 +120,10 @@ export async function listVideos(): Promise<Video[]> {
 }
 
 export async function getVideo(id: string): Promise<Video> {
-  const { data } = await api.get<{ video: unknown }>(`/videos/${id}`);
-  return mapVideo(data.video as never);
+  const { data } = await api.get<{ video: unknown; job?: { current_step?: string | null } | null }>(
+    `/videos/${id}`,
+  );
+  return { ...mapVideo(data.video as never), processing_step: data.job?.current_step ?? null };
 }
 
 // Two-step resumable upload: ask the API for a short-lived SAS URL, then PUT the file

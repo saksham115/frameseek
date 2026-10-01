@@ -20,6 +20,10 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 _MAX_IDLE_RECEIVES = 1  # stop after an empty receive so the job replica can exit
+# Keep the message locked for as long as the job may run (the worker job's
+# replicaTimeout). If the lock lapsed sooner, Service Bus would hand the same video to a
+# second worker while the first was still processing it.
+_LOCK_RENEWAL_SECONDS = 3 * 60 * 60
 
 
 async def _handle(body: dict) -> None:
@@ -44,7 +48,7 @@ async def run() -> None:
     processed = 0
     async with ServiceBusClient(settings.SERVICE_BUS_FQDN, credential) as client:
         receiver = client.get_queue_receiver(settings.SERVICE_BUS_QUEUE, max_wait_time=30)
-        async with receiver, AutoLockRenewer(max_lock_renewal_duration=1800) as renewer:
+        async with receiver, AutoLockRenewer(max_lock_renewal_duration=_LOCK_RENEWAL_SECONDS) as renewer:
             idle = 0
             while idle < _MAX_IDLE_RECEIVES:
                 messages = await receiver.receive_messages(max_message_count=1, max_wait_time=30)

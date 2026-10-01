@@ -2,6 +2,7 @@ import logging
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Callable
 
 from app.services.whisper_service import WhisperSegment, WhisperService
 
@@ -22,24 +23,58 @@ class AudioTranscriber:
     def __init__(self):
         self.whisper_service = WhisperService()
 
-    def transcribe_video(self, video_path: str, output_dir: str) -> tuple[list[WhisperSegment], str] | None:
-        """Extract audio and transcribe a video.
+    def transcribe_video(
+        self,
+        video_path: str,
+        output_dir: str,
+        progress_callback: Callable[[float], None] | None = None,
+    ) -> tuple[list[WhisperSegment], str] | None:
+        """Extract audio and transcribe a video, one audio piece at a time.
 
-        Returns (segments, language) or None if the video has no audio track.
+        Returns (segments, language) or None if the video has no audio track. Segment
+        times are shifted by each piece's start so they line up with the whole video.
         """
-        audio_path = self.whisper_service.extract_audio(video_path, output_dir)
-        if audio_path is None:
+        pieces = self.whisper_service.extract_audio(video_path, output_dir)
+        if pieces is None:
             return None
 
+        segments: list[WhisperSegment] = []
+        language: str | None = None
+        failures: list[Exception] = []
         try:
-            result = self.whisper_service.transcribe(audio_path)
-            return result.segments, result.language
+            for n, (path, offset) in enumerate(pieces):
+                # Each piece detects its own language: Whisper reports names ("english")
+                # but only accepts ISO-639-1 codes ("en") as input, so passing the first
+                # piece's result on would be rejected. The first one found is kept.
+                try:
+                    result = self.whisper_service.transcribe(path)
+                except Exception as e:
+                    # One bad piece shouldn't cost the whole transcript.
+                    logger.warning("Transcribing audio piece %d/%d failed: %s", n + 1, len(pieces), e)
+                    failures.append(e)
+                    if progress_callback:
+                        progress_callback((n + 1) / len(pieces))
+                    continue
+                language = language or result.language
+                for seg in result.segments:
+                    segments.append(WhisperSegment(
+                        index=len(segments),
+                        start=seg.start + offset,
+                        end=seg.end + offset,
+                        text=seg.text,
+                        avg_logprob=seg.avg_logprob,
+                    ))
+                if progress_callback:
+                    progress_callback((n + 1) / len(pieces))
+            if pieces and len(failures) == len(pieces):
+                raise failures[-1]
+            return segments, language or "en"
         finally:
-            # Clean up temp audio file
-            try:
-                Path(audio_path).unlink(missing_ok=True)
-            except OSError:
-                pass
+            for path, _ in pieces:
+                try:
+                    Path(path).unlink(missing_ok=True)
+                except OSError:
+                    pass
 
     @staticmethod
     def chunk_segments(

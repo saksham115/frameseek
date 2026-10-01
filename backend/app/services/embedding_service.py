@@ -55,6 +55,7 @@ class EmbeddingUnavailableError(RuntimeError):
 class EmbeddingService:
     def __init__(self, *, max_retries: int = 2, retry_budget_seconds: float = 10):
         self._credential = None
+        self._cached_token = None
         self._max_retries = max_retries
         self._retry_budget_seconds = retry_budget_seconds
 
@@ -63,11 +64,17 @@ class EmbeddingService:
         return f"{base}/computervision/retrieval:{operation}?api-version={_API_VERSION}&model-version=2023-04-15"
 
     def _token(self) -> str:
+        # Reuse the token until five minutes before it expires: indexing a long video
+        # makes thousands of calls, and fetching a token for each one is slow.
+        cached = self._cached_token
+        if cached and cached.expires_on - 300 > datetime.now(timezone.utc).timestamp():
+            return cached.token
         if self._credential is None:
             from azure.identity import DefaultAzureCredential
 
             self._credential = DefaultAzureCredential()
-        return self._credential.get_token(_TOKEN_SCOPE).token
+        self._cached_token = self._credential.get_token(_TOKEN_SCOPE)
+        return self._cached_token.token
 
     async def _post(self, operation: str, json_body: dict | None = None, content: bytes | None = None) -> list[float]:
         if not settings.AZURE_VISION_ENDPOINT:

@@ -126,7 +126,8 @@ resource worker 'Microsoft.App/jobs@2024-10-02-preview' = if (deployServices) {
     environmentId: environmentId
     configuration: {
       triggerType: 'Event'
-      replicaTimeout: 1800
+      // Long videos: allow up to 3 hours (matches the consumer's message-lock renewal).
+      replicaTimeout: 10800
       replicaRetryLimit: 1
       registries: registries
       eventTriggerConfig: {

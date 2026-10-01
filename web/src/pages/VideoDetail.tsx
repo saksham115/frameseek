@@ -36,7 +36,7 @@ import { search } from "@/api/search";
 import type { SearchMatch } from "@/api/types";
 import { Button } from "@/components/ui/button";
 import { MediaThumbnail, StatusBadge } from "@/components/MediaUI";
-import { formatBytes, formatTimestamp } from "@/lib/format";
+import { formatBytes, formatTimestamp, processingStepLabel } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import ClipTools, { ClipRangeSlider } from "@/components/ClipTools";
 import { formatClipTime, type ClipRange } from "@/lib/clip-time";
@@ -552,8 +552,9 @@ export default function VideoDetail() {
                   />
                   <h2>Preparing your video</h2>
                   <p>
-                    Processing frames and transcript. Playback will unlock when
-                    ready.
+                    {processingStepLabel(video?.processing_step) ??
+                      "Processing frames and transcript"}
+                    . Playback will unlock when ready.
                   </p>
                   <div
                     className="player-processing-progress"

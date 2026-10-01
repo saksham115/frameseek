@@ -27,6 +27,8 @@ export interface Video {
   video_url: string | null;
   created_at: string;
   progress?: number;
+  /** The processing job's current step, e.g. "indexing_frames:312/2632" (detail view only). */
+  processing_step?: string | null;
   width?: number | null;
   height?: number | null;
   fps?: number | null;

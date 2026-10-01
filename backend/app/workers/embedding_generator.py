@@ -1,9 +1,14 @@
+import asyncio
 import uuid
 from typing import Callable
 
 from app.repositories.vector_db import EmbeddingPoint, vector_db
 from app.services.embedding_service import EmbeddingService
 from app.workers.audio_transcriber import TranscriptChunk
+
+
+# Parallel Azure AI Vision requests per video (S1 allows 10 a second).
+FRAME_CONCURRENCY = 8
 
 
 class EmbeddingGenerator:
@@ -20,13 +25,36 @@ class EmbeddingGenerator:
         frames: list[dict],
         progress_callback: Callable | None = None,
     ) -> int:
-        """Generate embeddings for frames and store in pgvector."""
-        points: list[EmbeddingPoint] = []
-        total = len(frames)
+        """Generate embeddings for frames and store in pgvector.
 
+        Up to FRAME_CONCURRENCY requests run at once, which keeps Azure AI Vision S1
+        (10 requests a second) busy without tripping its rate limit; the service still
+        retries any 429s. progress_callback receives the fraction of frames done.
+        """
+        total = len(frames)
+        embeddings: list[list[float] | None] = [None] * total
+        done = 0
+        gate = asyncio.Semaphore(FRAME_CONCURRENCY)
+
+        async def embed(i: int) -> None:
+            nonlocal done
+            async with gate:
+                embeddings[i] = await self.embedding_service.generate_image_embedding(frames[i]["local_path"])
+            done += 1
+            if progress_callback:
+                progress_callback(done / total)
+
+        tasks = [asyncio.create_task(embed(i)) for i in range(total)]
+        try:
+            await asyncio.gather(*tasks)
+        except BaseException:
+            for t in tasks:
+                t.cancel()
+            raise
+
+        points: list[EmbeddingPoint] = []
         for i, frame in enumerate(frames):
-            image_path = frame["local_path"]
-            embedding = await self.embedding_service.generate_image_embedding(image_path)
+            embedding = embeddings[i]
 
             # Relative path for storage URL
             rel_path = f"{video_id}/frame_{frame['frame_index']:06d}.jpg"
@@ -52,9 +80,6 @@ class EmbeddingGenerator:
                 },
             )
             points.append(point)
-
-            if progress_callback:
-                progress_callback((i + 1) / total)
 
         # Batch upsert to pgvector
         if points:

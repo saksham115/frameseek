@@ -22,6 +22,7 @@ from app.utils.gcs_client import GCSClient
 from app.workers.audio_transcriber import AudioTranscriber
 from app.workers.embedding_generator import EmbeddingGenerator
 from app.workers.frame_extractor import FrameExtractor
+from app.workers.progress import ProgressReporter, VideoDeleted
 
 logger = logging.getLogger(__name__)
 
@@ -45,8 +46,10 @@ async def process_video(job_id: str):
 
         source_tmp: str | None = None
         vid = str(video.video_id)[:8]
+        video_id = video.video_id
+        reporter = ProgressReporter(job.job_id, video.video_id)
+        pipeline_start = time.time()
         try:
-            pipeline_start = time.time()
             file_size_mb = (video.file_size_bytes or 0) / (1024 ** 2)
             logger.info(
                 f"[{vid}] ▶ Starting pipeline | video=\"{video.title}\" "
@@ -59,6 +62,9 @@ async def process_video(job_id: str):
             job.current_step = "extracting_frames"
             video.status = "processing"
             await db.commit()
+            # From here a heartbeat writes progress every few seconds; if it stops, the
+            # API marks the video as failed so it can be retried.
+            reporter.start()
 
             # Idempotency: a retry (or re-process) must not duplicate data. Clear any
             # frames, transcript segments and vectors from a previous run first.
@@ -101,6 +107,7 @@ async def process_video(job_id: str):
                 video_path=source_path,
                 video_id=str(video.video_id),
                 interval_seconds=job.frame_interval_seconds,
+                progress_callback=reporter.stage(0, 25, "extracting_frames"),
             )
 
             logger.info(
@@ -109,9 +116,10 @@ async def process_video(job_id: str):
             )
 
             job.total_frames = len(extracted)
-            job.progress = 30
-            job.current_step = "saving_frames"
-            video.processing_progress = 30
+            reporter.update(25, "uploading_frames")
+            job.progress = 25
+            job.current_step = "uploading_frames"
+            video.processing_progress = 25
             await db.commit()
 
             # Upload frames to Blob if enabled (blocking I/O: run off the event loop)
@@ -123,7 +131,8 @@ async def process_video(job_id: str):
                 def _upload_frames() -> dict[int, str]:
                     gcs = GCSClient.get()
                     paths: dict[int, str] = {}
-                    for ef in extracted:
+                    for n, ef in enumerate(extracted):
+                        reporter.update(25 + 5 * (n + 1) / len(extracted), "uploading_frames")
                         frame_gcs = f"frames/{video.video_id}/frame_{ef.frame_index:06d}.jpg"
                         gcs.upload_file(ef.local_path, frame_gcs, content_type="image/jpeg")
                         paths[ef.frame_index] = frame_gcs
@@ -145,7 +154,8 @@ async def process_video(job_id: str):
             step_start = time.time()
             logger.info(f"[{vid}] Step 2/5: Saving {len(extracted)} frame records to DB")
             frame_dicts = []
-            for ef in extracted:
+            for n, ef in enumerate(extracted):
+                reporter.update(30 + 10 * (n + 1) / len(extracted), "saving_frames")
                 frame = Frame(
                     video_id=video.video_id,
                     user_id=video.user_id,
@@ -174,6 +184,7 @@ async def process_video(job_id: str):
                 f"in {time.time() - step_start:.1f}s"
             )
 
+            reporter.update(40, "transcribing_audio")
             job.progress = 40
             job.current_step = "transcribing_audio"
             video.processing_progress = 40
@@ -183,14 +194,18 @@ async def process_video(job_id: str):
             step_start = time.time()
             logger.info(f"[{vid}] Step 3/5: Transcribing audio")
             transcript_chunks = []
-            await _transcribe_audio(db, video, frame_dicts, transcript_chunks, video_path=source_path)
+            await _transcribe_audio(
+                db, video, frame_dicts, transcript_chunks, video_path=source_path,
+                progress_callback=reporter.stage(40, 55, "transcribing_audio"),
+            )
             logger.info(
                 f"[{vid}] Step 3/5: Done, status={video.transcript_status}, "
                 f"{len(transcript_chunks)} chunks in {time.time() - step_start:.1f}s"
             )
 
+            reporter.update(55, f"indexing_frames:0/{len(frame_dicts)}")
             job.progress = 55
-            job.current_step = "generating_embeddings"
+            job.current_step = f"indexing_frames:0/{len(frame_dicts)}"[:50]
             video.processing_progress = 55
             await db.commit()
 
@@ -199,11 +214,16 @@ async def process_video(job_id: str):
             logger.info(f"[{vid}] Step 4/5: Generating embeddings for {len(frame_dicts)} frames")
             generator = EmbeddingGenerator()
 
+            frame_total = len(frame_dicts)
             stored = await generator.generate_and_store(
                 user_id=str(video.user_id),
                 video_id=str(video.video_id),
                 video_title=video.title,
                 frames=frame_dicts,
+                # current_step "indexing_frames:312/2632" lets the app show live counts.
+                progress_callback=reporter.stage(
+                    55, 80, lambda f: f"indexing_frames:{round(f * frame_total)}/{frame_total}"
+                ),
             )
             logger.info(
                 f"[{vid}] Step 4/5: Done, {stored} frame embeddings stored "
@@ -220,8 +240,9 @@ async def process_video(job_id: str):
                     frame_record.embedding_id = fd["frame_id"]
                     frame_record.embedding_generated_at = datetime.now(timezone.utc)
 
+            reporter.update(80, "indexing_transcript")
             job.progress = 80
-            job.current_step = "embedding_transcripts"
+            job.current_step = "indexing_transcript"
             video.processing_progress = 80
             await db.commit()
 
@@ -238,6 +259,7 @@ async def process_video(job_id: str):
                     video_title=video.title,
                     chunks=transcript_chunks,
                     frames=frame_dicts,
+                    progress_callback=reporter.stage(80, 99, "indexing_transcript"),
                 )
                 logger.info(
                     f"[{vid}] Step 5/5: Done, {transcript_stored} transcript embeddings "
@@ -290,6 +312,12 @@ async def process_video(job_id: str):
 
         except Exception as e:
             total_time = time.time() - pipeline_start
+            await db.rollback()
+            # Deleting a video mid-run removes its rows; that's not a processing failure,
+            # so stop quietly instead of erroring (and dead-lettering the message).
+            if isinstance(e, VideoDeleted) or not await _video_exists(db, video_id):
+                logger.info(f"[{vid}] Video was deleted during processing; stopped after {total_time:.1f}s")
+                return
             logger.exception(f"[{vid}] ✗ Pipeline failed after {total_time:.1f}s: {e}")
             job.status = "failed"
             job.error_message = str(e)
@@ -299,8 +327,16 @@ async def process_video(job_id: str):
             video.error_message = str(e)
             await db.commit()
         finally:
+            await reporter.stop()
             if source_tmp and Path(source_tmp).exists():
                 shutil.rmtree(source_tmp, ignore_errors=True)
+
+
+async def _video_exists(db: AsyncSession, video_id: UUID) -> bool:
+    result = await db.execute(
+        select(Video.video_id).where(Video.video_id == video_id, Video.deleted_at.is_(None))
+    )
+    return result.first() is not None
 
 
 async def _reset_derived_data(db: AsyncSession, video: Video) -> None:
@@ -324,6 +360,7 @@ async def _transcribe_audio(
     transcript_chunks_out: list,
     max_retries: int = 1,
     video_path: str | None = None,
+    progress_callback=None,
 ):
     """Run transcription with retry. Non-blocking: failures don't stop the pipeline."""
     transcriber = AudioTranscriber()
@@ -335,7 +372,9 @@ async def _transcribe_audio(
             await db.commit()
 
             with tempfile.TemporaryDirectory() as tmp_dir:
-                result = await asyncio.to_thread(transcriber.transcribe_video, source_path, tmp_dir)
+                result = await asyncio.to_thread(
+                    transcriber.transcribe_video, source_path, tmp_dir, progress_callback
+                )
 
             if result is None:
                 # No audio track

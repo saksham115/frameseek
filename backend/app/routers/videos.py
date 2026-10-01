@@ -25,6 +25,7 @@ from app.schemas.video import (
 from app.services.job_service import JobService
 from app.services.shot_service import SHOT_SIMILARITY_THRESHOLD, ShotService
 from app.services.video_service import VideoService
+from app.workers.progress import mark_stalled_videos
 from app.utils.gcs_client import GCSClient
 from app.utils.url_helpers import resolve_storage_url
 
@@ -66,6 +67,7 @@ async def list_videos(
     db: AsyncSession = Depends(get_db),
 ):
     service = VideoService(db)
+    await mark_stalled_videos(db, user.user_id)
     videos, total = await service.list_videos(
         user.user_id, folder_id=folder_id, status=status, source_type=source_type,
         page=page, limit=limit, sort=sort, order=order, q=q,
@@ -110,6 +112,7 @@ async def get_video(
     db: AsyncSession = Depends(get_db),
 ):
     service = VideoService(db)
+    await mark_stalled_videos(db, user.user_id)
     video = await service.get_video(video_id, user.user_id)
     frames_count = await service.get_frame_count(video_id)
 
