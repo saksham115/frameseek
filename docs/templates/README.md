@@ -70,8 +70,8 @@ renderer's rules in `web/src/lib/creator.ts`, and tests on both sides pin them.
 
 ## User flow and screens
 
-The sidebar stays at two tabs (Media library, Visual search). Templates are reached from
-where the moments already are, and creations live inside the Media library.
+Templates are reached from where the moments already are. Creations have their own page in
+the sidebar (Creations), split into Drafts (saved as you edit) and Rendered.
 
 1. **Entry points**
    - Video workspace: a **Create** button next to Export clip. Starts with the current
@@ -87,8 +87,8 @@ where the moments already are, and creations live inside the Media library.
    - Top bar: name, format switcher, **Render**.
 4. **Render**: progress with the current step ("Mixing audio", "Encoding 64%"), then a
    ready notification (same system as video processing). Download, open, edit again.
-5. **Creations** in the Media library: a filter tab next to All videos/Ready/Processing,
-   showing rendered outputs with their template and format.
+5. **Creations** page in the sidebar: Drafts (everything not yet rendered, saved as you
+   edit, with a Save draft button in the editor) and Rendered videos to download.
 
 ### The adjustable panel
 

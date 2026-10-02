@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, ArrowLeft, Check, Clapperboard, Download, Loader2, Trash2 } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Check, Clapperboard, Download, Loader2, Save, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   deleteRender,
@@ -69,7 +69,7 @@ export default function CreationEditor() {
       <div className="creator-missing">
         <h2>{errorStatus(error) === 404 ? "This creation doesn’t exist" : "We couldn’t open this creation"}</h2>
         <Button asChild className="studio-button" variant="outline">
-          <Link to="/?status=creations">
+          <Link to="/creations">
             <ArrowLeft /> Back to your creations
           </Link>
         </Button>
@@ -88,6 +88,7 @@ export default function CreationEditor() {
 
 function Editor({ creation, catalog, onSaved }: { creation: Creation; catalog: TemplateCatalog; onSaved: (c: Creation) => void }) {
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const recipe = creation.recipe;
   const [draft, setDraft] = useState<Draft>({
     name: creation.name,
@@ -355,7 +356,7 @@ function Editor({ creation, catalog, onSaved }: { creation: Creation; catalog: T
   return (
     <div className="creator-editor">
       <div className="creator-top">
-        <Link to="/?status=creations" className="icon-button" aria-label="Back to your creations">
+        <Link to={renders.some((r) => r.status === "ready") ? "/creations?tab=rendered" : "/creations"} className="icon-button" aria-label="Back to your creations">
           <ArrowLeft size={15} />
         </Link>
         <div className="creator-title">
@@ -367,13 +368,32 @@ function Editor({ creation, catalog, onSaved }: { creation: Creation; catalog: T
             onBlur={() => draft.name.trim() && draft.name !== creation.name && queue({ name: draft.name.trim() })}
           />
           <p>
+            {!renders.some((r) => r.status === "ready") && <span className="draft-chip">DRAFT</span>}
             {recipe.name.toUpperCase()} <span>/</span>
             <span className={cn("save-state", `is-${saveState}`)}>
               {saveState === "saved" ? <><Check size={9} /> SAVED</> : saveState === "error" ? "NOT SAVED" : "SAVING…"}
             </span>
           </p>
         </div>
-        <div className="creator-top-actions">{renderButton}</div>
+        <div className="creator-top-actions">
+          <Button
+            variant="outline"
+            className="studio-button"
+            disabled={saveState === "saving"}
+            onClick={async () => {
+              if (draft.name.trim() && draft.name !== creation.name) queue({ name: draft.name.trim() });
+              await flush();
+              if (!Object.keys(pending.current).length) {
+                toast.success("Draft saved. Pick it up any time from Creations.", {
+                  action: { label: "View drafts", onClick: () => navigate("/creations") },
+                });
+              }
+            }}
+          >
+            <Save /> Save draft
+          </Button>
+          {renderButton}
+        </div>
       </div>
       <div className="creator-grid">
         <div className="creator-main">

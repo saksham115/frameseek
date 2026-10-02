@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Clapperboard, Download, Loader2, MoreHorizontal, Plus, Trash2 } from "lucide-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { formatDistanceToNow } from "date-fns";
+import { AlertTriangle, Clapperboard, Download, Loader2, MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { deleteCreation, downloadRender, listCreations, RENDER_ACTIVE, type Creation } from "@/api/creations";
+import { deleteCreation, downloadRender, RENDER_ACTIVE, type Creation } from "@/api/creations";
 import { MediaThumbnail } from "@/components/MediaUI";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,23 +18,30 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import TemplateGallery from "@/components/creator/TemplateGallery";
 import { apiErrorMessage } from "@/lib/errors";
 import { formatClipTime } from "@/lib/clip-time";
 import { momentsTotal } from "@/lib/creator";
 import "@/creator.css";
 
-/** The Creations tab of the media library: template drafts and their rendered videos. */
-export default function CreationsGrid() {
+/** A creation is a draft until it has a finished render. */
+export function isDraft(c: Creation) {
+  return c.latest_render?.status !== "ready";
+}
+
+/** A grid of creations: drafts to continue and rendered videos to download. */
+export default function CreationsGrid({
+  creations,
+  onNew,
+  emptyTitle,
+  emptyText,
+}: {
+  creations: Creation[];
+  onNew: () => void;
+  emptyTitle: string;
+  emptyText: string;
+}) {
   const qc = useQueryClient();
-  const [gallery, setGallery] = useState(false);
   const [deleting, setDeleting] = useState<Creation | null>(null);
-  const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ["creations"],
-    queryFn: listCreations,
-    refetchInterval: (q) =>
-      q.state.data?.some((c) => c.latest_render && RENDER_ACTIVE.includes(c.latest_render.status)) ? 4000 : false,
-  });
   const remove = useMutation({
     mutationFn: (c: Creation) => deleteCreation(c.creation_id),
     onSuccess: (_, c) => {
@@ -43,41 +51,18 @@ export default function CreationsGrid() {
     },
     onError: (e) => toast.error(apiErrorMessage(e, "Couldn’t delete this creation.")),
   });
-  const creations = data ?? [];
 
   return (
     <>
-      <div className="section-caption">
-        <span>
-          Creations <span className="ml-2 opacity-60">{creations.length.toString().padStart(2, "0")}</span>
-        </span>
-        <span>Shorts, reels and brand videos made from your moments</span>
-      </div>
-      {isError ? (
-        <div className="error-state" role="alert">
-          We couldn’t load your creations.{" "}
-          <button className="underline ml-2" onClick={() => refetch()}>
-            Try again
-          </button>
-        </div>
-      ) : isLoading ? (
-        <div className="media-grid library-grid">
-          {[0, 1, 2].map((i) => (
-            <div key={i} className="skeleton aspect-[4/3]" />
-          ))}
-        </div>
-      ) : !creations.length ? (
+      {!creations.length ? (
         <div className="empty-state">
           <div className="empty-icon">
             <Clapperboard size={24} strokeWidth={1.3} />
           </div>
-          <h2>Turn your moments into ready-to-post videos</h2>
-          <p>
-            Pick a template for shorts, highlight reels, testimonials and more. Open a video and choose Create, or start
-            here and add moments in the editor.
-          </p>
+          <h2>{emptyTitle}</h2>
+          <p>{emptyText}</p>
           <div className="flex justify-center gap-2 mt-6">
-            <Button className="studio-button" onClick={() => setGallery(true)}>
+            <Button className="studio-button" onClick={onNew}>
               <Plus /> New creation
             </Button>
           </div>
@@ -87,6 +72,7 @@ export default function CreationsGrid() {
           {creations.map((c) => {
             const r = c.latest_render;
             const rendering = r && RENDER_ACTIVE.includes(r.status);
+            const draft = isDraft(c);
             return (
               <div key={c.creation_id} className="media-card creation-card">
                 <Link className="media-card-link" to={`/create/${c.creation_id}`}>
@@ -94,6 +80,7 @@ export default function CreationsGrid() {
                     <MediaThumbnail src={c.thumbnail_url} />
                     <div className="preview-shade" />
                     <span className="creation-badge">{c.settings.format}</span>
+                    {draft && !rendering && <span className="creation-draft">Draft</span>}
                     {rendering ? (
                       <div className="card-processing" role="status">
                         <Loader2 size={15} className="animate-spin" />
@@ -107,6 +94,10 @@ export default function CreationsGrid() {
                         <AlertTriangle size={15} />
                         <span>Render didn’t finish. Open to retry</span>
                       </div>
+                    ) : draft ? (
+                      <span className="creation-continue">
+                        <Pencil size={13} /> Continue editing
+                      </span>
                     ) : null}
                     <span className="timecode">{formatClipTime(momentsTotal(c.moments))}</span>
                   </div>
@@ -116,7 +107,10 @@ export default function CreationsGrid() {
                     </span>
                     <div className="media-card-meta">
                       <span>{c.recipe.name}</span>
-                      <span>{r?.status === "ready" ? "Rendered" : "Draft"}</span>
+                      <span title={new Date(c.updated_at).toLocaleString()}>
+                        {draft ? "Edited " : "Rendered "}
+                        {formatDistanceToNow(new Date(draft ? c.updated_at : (r?.completed_at ?? c.updated_at)), { addSuffix: true })}
+                      </span>
                     </div>
                   </div>
                 </Link>
@@ -127,6 +121,11 @@ export default function CreationsGrid() {
                     </button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
+                    <DropdownMenuItem asChild>
+                      <Link to={`/create/${c.creation_id}`}>
+                        <Pencil size={13} /> Edit
+                      </Link>
+                    </DropdownMenuItem>
                     {r?.status === "ready" && (
                       <DropdownMenuItem
                         onSelect={() =>
@@ -144,7 +143,7 @@ export default function CreationsGrid() {
               </div>
             );
           })}
-          <button type="button" className="import-tile" onClick={() => setGallery(true)}>
+          <button type="button" className="import-tile" onClick={onNew}>
             <div className="import-plus">
               <Plus size={20} strokeWidth={1.5} />
             </div>
@@ -153,14 +152,13 @@ export default function CreationsGrid() {
           </button>
         </div>
       )}
-      <TemplateGallery open={gallery} onOpenChange={setGallery} />
       <AlertDialog open={!!deleting} onOpenChange={(o) => !o && setDeleting(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete this creation?</AlertDialogTitle>
+            <AlertDialogTitle>Delete this {deleting && isDraft(deleting) ? "draft" : "creation"}?</AlertDialogTitle>
             <AlertDialogDescription>
-              “{deleting?.name}” and its rendered videos will be deleted. The videos you made it from stay in your
-              library.
+              “{deleting?.name}” and any rendered videos from it will be deleted. The videos you made it from stay in
+              your library.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

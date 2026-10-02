@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   ArrowUpRight,
   ChevronRight,
+  Clapperboard,
   Film,
   FolderOpen,
   HardDrive,
@@ -27,10 +28,14 @@ import ProcessingNotifier from "@/components/ProcessingNotifier";
 import { useImportDialog } from "@/store/importDialog";
 import ProductTour from "@/components/ProductTour";
 import { cn } from "@/lib/utils";
+import { useQuery } from "@tanstack/react-query";
+import { listCreations } from "@/api/creations";
+import { isDraft } from "@/components/creator/CreationsGrid";
 
 const NAV = [
   { to: "/", label: "Media library", icon: FolderOpen, end: true, tour: "nav-library" },
   { to: "/search", label: "Visual search", icon: Search, end: false, tour: "nav-search" },
+  { to: "/creations", label: "Creations", icon: Clapperboard, end: false, tour: "nav-creations" },
 ];
 
 export default function AppShell() {
@@ -49,8 +54,11 @@ export default function AppShell() {
         "/search": "Visual search",
         "/settings": "Settings",
         "/upgrade": "Plans",
+        "/creations": "Creations",
       }[location.pathname] ?? "Workspace");
   const uploads = useUploads((s) => s.items);
+  const { data: creations } = useQuery({ queryKey: ["creations"], queryFn: listCreations, staleTime: 60_000 });
+  const drafts = (creations ?? []).filter(isDraft).length;
   const activeUploads = uploads.filter(isActiveUpload);
   const uploadBytes = activeUploads.reduce((n, i) => n + i.file.size, 0);
   const uploadPercent = uploadBytes
@@ -213,13 +221,19 @@ export default function AppShell() {
               className={({ isActive }) =>
                 cn(
                   "studio-nav",
-                  (isActive || (to === "/" && isEditor)) && "active",
+                  (isActive ||
+                    (to === "/" && isEditor && !isCreator) ||
+                    (to === "/creations" && isCreator)) &&
+                    "active",
                 )
               }
             >
               <Icon size={17} strokeWidth={1.7} />
               <span>{label}</span>
               {to === "/search" && <span className="nav-new">AI</span>}
+              {to === "/creations" && drafts > 0 && (
+                <span className="nav-count" aria-label={`${drafts} drafts`}>{drafts}</span>
+              )}
             </NavLink>
           ))}
         </nav>

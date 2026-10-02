@@ -215,6 +215,20 @@
   background: hsl(var(--primary));
   margin-left: auto;
 }
+.nav-count {
+  margin-left: auto;
+  min-width: 18px;
+  padding: 1px 6px;
+  border-radius: 99px;
+  font: 600 9px/14px "JetBrains Mono", monospace;
+  text-align: center;
+  background: hsl(var(--secondary));
+  color: hsl(var(--muted-foreground));
+}
+.studio-nav.active .nav-count {
+  background: hsl(var(--primary) / 0.15);
+  color: hsl(var(--primary));
+}
 .nav-new {
   font-size: 8px;
   line-height: 13px;

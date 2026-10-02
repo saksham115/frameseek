@@ -1023,6 +1023,51 @@
 .creation-card .media-card-preview img {
   object-fit: cover;
 }
+.creation-draft {
+  position: absolute;
+  left: 46px;
+  top: 8px;
+  font: 600 9px "JetBrains Mono", monospace;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--amber);
+  color: var(--logo-fg);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.creation-continue {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 7px 12px;
+  border-radius: 99px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.media-card:hover .creation-continue,
+.media-card:focus-within .creation-continue {
+  opacity: 1;
+}
+.tab-count {
+  margin-left: 6px;
+  font: 9px "JetBrains Mono", monospace;
+  color: hsl(var(--muted-foreground));
+}
+.draft-chip {
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: var(--amber);
+  color: var(--logo-fg);
+  font-weight: 600;
+}
 .creation-badge {
   position: absolute;
   left: 8px;

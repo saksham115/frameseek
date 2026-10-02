@@ -220,3 +220,10 @@ async def test_library_music_needs_pro_once_limits_are_enforced(client, test_use
         assert music["library_locked"] is True
         resp = await client.post(f"{url}/render", headers=test_user["headers"])
         assert resp.status_code == 403 and "music library" in resp.json()["detail"]
+
+
+async def test_a_draft_shows_its_first_moment_as_thumbnail(client, test_user, ready_video):
+    await _create(client, test_user, ready_video)
+    listed = (await client.get("/api/v1/creations", headers=test_user["headers"])).json()["data"]["creations"]
+    assert listed[0]["latest_render"] is None
+    assert listed[0]["thumbnail_url"] == "https://storage.test/read"

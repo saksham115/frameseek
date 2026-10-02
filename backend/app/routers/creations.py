@@ -56,6 +56,9 @@ def _creation_response(creation: Creation, latest: Render | None = None) -> Crea
     resp.latest_render = _render_response(latest)
     if latest is not None and latest.status == "ready":
         resp.thumbnail_url = resp.latest_render.thumbnail_url
+    if not resp.thumbnail_url and creation.moments:
+        # A draft has no render yet: show its first moment's video.
+        resp.thumbnail_url = _signed(f"frames/{creation.moments[0]['video_id']}/thumb_000000.jpg")
     return resp
 
 
