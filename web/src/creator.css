@@ -218,6 +218,7 @@
 }
 .creator-top-actions {
   display: flex;
+  align-items: center;
   gap: 8px;
 }
 .creator-grid {
@@ -405,6 +406,7 @@
 }
 .moment-item {
   flex: 0 0 252px;
+  cursor: pointer;
   display: grid;
   grid-template-columns: 64px 1fr;
   grid-template-rows: auto auto;
@@ -1035,6 +1037,40 @@
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
+.creation-draft.is-ready {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+}
+.creation-draft.is-ready::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #4ade80;
+}
+.render-blocker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: hsl(var(--muted-foreground));
+  max-width: 280px;
+}
+.render-blocker svg {
+  color: var(--amber);
+  flex-shrink: 0;
+}
+button.moment-thumb {
+  padding: 0;
+  border-radius: 4px;
+}
+.cp-video-box:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
 .creation-continue {
   position: absolute;
   left: 50%;
@@ -1079,9 +1115,37 @@
   color: #fff;
 }
 
+/* Touch screens: 16px inputs (no zoom on focus in iOS Safari) and larger tap targets. */
+@media (pointer: coarse) {
+  .cp-input,
+  .cp-caption-line textarea,
+  .moment-time input,
+  .creator-title input {
+    font-size: 16px;
+  }
+  .moment-time input {
+    width: 84px;
+  }
+  .moment-actions .icon-button,
+  .cp-lib-play,
+  .cp-track .icon-button {
+    width: 40px;
+    height: 40px;
+  }
+  .cp-logo-remove {
+    opacity: 1;
+    width: 24px;
+    height: 24px;
+  }
+}
+
 @media (max-width: 1000px) {
   .creator-grid {
     grid-template-columns: 1fr;
+  }
+  .cp-tabs {
+    justify-content: flex-start;
+    gap: 18px;
   }
   .creator-main {
     border-right: 0;
@@ -1100,6 +1164,11 @@
   }
   .creator-top-actions {
     width: 100%;
+    flex-wrap: wrap;
+  }
+  .render-blocker {
+    width: 100%;
+    max-width: none;
   }
   .creator-top-actions > * {
     flex: 1;

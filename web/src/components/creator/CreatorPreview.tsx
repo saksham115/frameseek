@@ -429,6 +429,19 @@ export default function CreatorPreview({
             onPointerUp={onPointerUp}
             onPointerCancel={onPointerUp}
             title={draggable ? "Drag to reframe" : undefined}
+            tabIndex={draggable ? 0 : -1}
+            role={draggable ? "application" : undefined}
+            aria-label={draggable ? "Framing. Use the arrow keys to move the picture" : undefined}
+            onKeyDown={(e) => {
+              if (!draggable || !e.key.startsWith("Arrow")) return;
+              e.preventDefault();
+              const m = seg!.moment!;
+              const c = m.crop ?? { x: 0.5, y: 0.5, zoom: 1 };
+              const step = e.shiftKey ? 0.1 : 0.02;
+              const dx = e.key === "ArrowLeft" ? step : e.key === "ArrowRight" ? -step : 0;
+              const dy = e.key === "ArrowUp" ? step : e.key === "ArrowDown" ? -step : 0;
+              onCropChange(m.id, { ...c, x: Math.min(1, Math.max(0, c.x + dx)), y: Math.min(1, Math.max(0, c.y + dy)) });
+            }}
           >
             <video
               ref={backdropRef}

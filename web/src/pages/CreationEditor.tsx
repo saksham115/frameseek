@@ -376,6 +376,11 @@ function Editor({ creation, catalog, onSaved }: { creation: Creation; catalog: T
           </p>
         </div>
         <div className="creator-top-actions">
+          {blocker && !active && (
+            <span className="render-blocker" role="status">
+              <AlertTriangle size={12} /> {blocker}
+            </span>
+          )}
           <Button
             variant="outline"
             className="studio-button"

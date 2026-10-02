@@ -4,6 +4,7 @@ import { ArrowLeft, ArrowRight, Film, Loader2, Plus, Trash2, Volume2, VolumeX } 
 import type { Moment, TemplateRecipe } from "@/api/creations";
 import type { Video } from "@/api/types";
 import { getShots, listVideos } from "@/api/videos";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { MediaThumbnail } from "@/components/MediaUI";
@@ -90,10 +91,16 @@ export default function MomentStrip({
               className={cn("moment-item", selectedId === m.id && "is-selected", tooLong && "is-invalid")}
               onClick={() => onSelect(m.id)}
             >
-              <div className="moment-thumb">
+              <button
+                type="button"
+                className="moment-thumb"
+                aria-label={`Select moment ${i + 1}`}
+                aria-pressed={selectedId === m.id}
+                onClick={() => onSelect(m.id)}
+              >
                 <MediaThumbnail src={video?.thumbnail_url ?? null} />
                 <span className="moment-index">{i + 1}</span>
-              </div>
+              </button>
               <div className="moment-body">
                 <strong title={video?.title}>{video?.title ?? "Video unavailable"}</strong>
                 <div className="moment-times">
@@ -131,7 +138,13 @@ export default function MomentStrip({
                 <button
                   className="icon-button"
                   aria-label="Remove moment"
-                  onClick={() => onChange(moments.filter((x) => x.id !== m.id))}
+                  onClick={() => {
+                    const before = moments;
+                    onChange(moments.filter((x) => x.id !== m.id));
+                    toast(`Moment ${i + 1} removed`, {
+                      action: { label: "Undo", onClick: () => onChange(before) },
+                    });
+                  }}
                 >
                   <Trash2 size={13} />
                 </button>

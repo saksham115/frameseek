@@ -17,7 +17,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { apiErrorMessage } from "@/lib/errors";
 import { formatClipTime } from "@/lib/clip-time";
 import { momentsTotal } from "@/lib/creator";
@@ -81,6 +87,7 @@ export default function CreationsGrid({
                     <div className="preview-shade" />
                     <span className="creation-badge">{c.settings.format}</span>
                     {draft && !rendering && <span className="creation-draft">Draft</span>}
+                    {!draft && <span className="creation-draft is-ready">Ready</span>}
                     {rendering ? (
                       <div className="card-processing" role="status">
                         <Loader2 size={15} className="animate-spin" />
@@ -120,10 +127,10 @@ export default function CreationsGrid({
                       <MoreHorizontal size={15} />
                     </button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
+                  <DropdownMenuContent align="end" className="studio-menu">
                     <DropdownMenuItem asChild>
                       <Link to={`/create/${c.creation_id}`}>
-                        <Pencil size={13} /> Edit
+                        <Pencil /> {isDraft(c) ? "Continue editing" : "Edit"}
                       </Link>
                     </DropdownMenuItem>
                     {r?.status === "ready" && (
@@ -132,11 +139,12 @@ export default function CreationsGrid({
                           downloadRender(r.render_id).catch((e) => toast.error(apiErrorMessage(e, "Download failed.")))
                         }
                       >
-                        <Download size={13} /> Download video
+                        <Download /> Download video
                       </DropdownMenuItem>
                     )}
-                    <DropdownMenuItem className="text-destructive" onSelect={() => setDeleting(c)}>
-                      <Trash2 size={13} /> Delete
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem className="text-destructive focus:text-destructive" onSelect={() => setDeleting(c)}>
+                      <Trash2 /> Delete
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
