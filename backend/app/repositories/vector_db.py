@@ -38,6 +38,8 @@ class SearchResult:
     timestamp: float
     score: float
     payload: dict[str, Any]
+    # The frame's embedding, when the search asked for it (used for re-ranking).
+    vector: list[float] | None = None
 
 
 @dataclass
@@ -142,6 +144,7 @@ class VectorDB:
         video_ids: list[str] | None = None,
         min_score: float = 0.05,
         source_type_filter: str | None = None,
+        include_vectors: bool = False,
     ) -> list[SearchResult]:
         self._ensure_schema()
         params: dict[str, Any] = {"user_id": str(user_id), "qvec": _vec_literal(query_vector), "top_k": top_k}
@@ -154,7 +157,7 @@ class VectorDB:
             params["source_type"] = source_type_filter
 
         sql = f"""
-            SELECT id, video_id, payload,
+            SELECT id, video_id, payload,{" embedding::text AS embedding_text," if include_vectors else ""}
                    1 - (embedding <=> CAST(:qvec AS vector)) AS score
             FROM {_TABLE}
             WHERE {' AND '.join(where)}
@@ -177,6 +180,7 @@ class VectorDB:
                     timestamp=float(payload.get("timestamp_seconds", 0)),
                     score=score,
                     payload=payload,
+                    vector=json.loads(r["embedding_text"]) if include_vectors else None,
                 )
             )
         return results

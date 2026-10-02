@@ -13,6 +13,7 @@ from app.models.video import Video
 from app.repositories.vector_db import vector_db
 from app.schemas.search import SearchQuota, SearchRequest, SearchResponse, SearchResultItem
 from app.services.embedding_service import EmbeddingService, EmbeddingUnavailableError
+from app.services import generic_frames
 from app.services.shot_service import Shot, ShotService, shot_at
 
 from app.utils.formatting import format_duration
@@ -99,6 +100,11 @@ class SearchService:
             video_ids=video_id_strs,
             min_score=request.min_score,
             source_type_filter="local",
+            include_vectors=True,
+        )
+        # Push generic frames (black screens, end cards) below real matches.
+        raw_results = generic_frames.rerank(
+            raw_results, await generic_frames.reference_vectors(self.embedding_service)
         )
 
         # Enrich results with video titles and short-lived signed URLs (Blob SAS only).
