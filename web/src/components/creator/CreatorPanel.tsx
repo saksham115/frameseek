@@ -1,6 +1,6 @@
-import { useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Crosshair, Loader2, Music2, RotateCcw, Trash2, Upload } from "lucide-react";
+import { Check, Crosshair, Loader2, Pause, Play, RotateCcw, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import {
   deleteAsset,
@@ -479,13 +479,26 @@ function BrandingTab({ recipe, settings, onSettings, catalog }: PanelProps) {
   );
 }
 
-function MusicTab({ settings, onSettings }: PanelProps) {
+const MOOD_LABELS: Record<string, string> = {
+  upbeat: "Upbeat",
+  energetic: "Energetic",
+  chill: "Chill",
+  warm: "Warm",
+  focus: "Focus",
+  dramatic: "Dramatic",
+};
+
+function MusicTab({ recipe, settings, onSettings }: PanelProps) {
   const m = settings.music;
   const input = useRef<HTMLInputElement>(null);
+  const player = useRef<HTMLAudioElement>(null);
   const [rights, setRights] = useState(false);
+  const suggested = recipe.music.default_mood !== "none" ? recipe.music.default_mood : "";
+  const [mood, setMood] = useState<string>(suggested);
+  const [playing, setPlaying] = useState<string | null>(null);
   const qc = useQueryClient();
   const { data } = useQuery({ queryKey: ["music"], queryFn: getMusic });
-  const upload = useUpload("music", (id) => onSettings({ music: { asset_id: id } }));
+  const upload = useUpload("music", (id) => onSettings({ music: { asset_id: id, track_id: null } }));
   const remove = useMutation({
     mutationFn: deleteAsset,
     onSuccess: (_, id) => {
@@ -493,46 +506,97 @@ function MusicTab({ settings, onSettings }: PanelProps) {
       if (m.asset_id === id) onSettings({ music: { asset_id: null } });
     },
   });
+  const library = (data?.library ?? []).filter((t) => !mood || t.mood === mood);
+  const locked = !!data?.library_locked;
+  const chosen = !!(m.track_id || m.asset_id);
+
+  const toggle = (id: string, url: string) => {
+    const a = player.current;
+    if (!a) return;
+    if (playing === id) {
+      a.pause();
+      setPlaying(null);
+      return;
+    }
+    a.src = url;
+    void a.play().then(() => setPlaying(id)).catch(() => setPlaying(null));
+  };
+  useEffect(() => () => player.current?.pause(), []);
+
   return (
     <>
-      {!data?.library_available && (
-        <p className="cp-callout">
-          <Music2 size={13} /> A licensed music library is on its way. For now, add tracks you have the rights to use.
+      <audio ref={player} onEnded={() => setPlaying(null)} />
+      <button className={cn("cp-track", !chosen && "active")} onClick={() => onSettings({ music: { asset_id: null, track_id: null } })}>
+        No music
+      </button>
+      <Field label="Stock music" hint={locked ? "Included with Pro" : `${data?.library.length ?? 0} tracks, free to use`}>
+        <div className="cp-chips">
+          <button className={cn("cp-chip", !mood && "active")} onClick={() => setMood("")}>All</button>
+          {(data?.moods ?? []).map((md) => (
+            <button key={md} className={cn("cp-chip", mood === md && "active")} onClick={() => setMood(md)}>
+              {MOOD_LABELS[md] ?? md}
+              {md === suggested && " · suggested"}
+            </button>
+          ))}
+        </div>
+        <div className="cp-library">
+          {library.map((t) => (
+            <div key={t.id} className={cn("cp-lib-track", m.track_id === t.id && "active")}>
+              <button
+                className="cp-lib-play"
+                aria-label={playing === t.id ? `Pause ${t.title}` : `Play ${t.title}`}
+                onClick={() => toggle(t.id, t.url)}
+              >
+                {playing === t.id ? <Pause size={12} /> : <Play size={12} />}
+              </button>
+              <button
+                className="cp-lib-pick"
+                disabled={locked}
+                onClick={() => onSettings({ music: { track_id: t.id, asset_id: null } })}
+              >
+                <strong>{t.title}</strong>
+                <span>
+                  {MOOD_LABELS[t.mood] ?? t.mood} · {formatClipTime(t.duration_seconds).slice(0, 5)}
+                </span>
+              </button>
+              {m.track_id === t.id && <Check size={13} className="cp-lib-check" />}
+            </div>
+          ))}
+        </div>
+        <p className="cp-note">
+          Public-domain tracks by HoliznaCC0 (CC0): free for personal and commercial videos, no credit needed.
         </p>
-      )}
-      <Field label="Track">
+      </Field>
+      <Field label="Your music">
         <div className="cp-tracks">
-          <button className={cn("cp-track", !m.asset_id && "active")} onClick={() => onSettings({ music: { asset_id: null } })}>
-            No music
-          </button>
           {(data?.uploads ?? []).map((a) => (
             <div key={a.asset_id} className={cn("cp-track", m.asset_id === a.asset_id && "active")}>
-              <button onClick={() => onSettings({ music: { asset_id: a.asset_id } })}>{a.filename}</button>
+              <button onClick={() => onSettings({ music: { asset_id: a.asset_id, track_id: null } })}>{a.filename}</button>
               <button className="icon-button" aria-label={`Delete ${a.filename}`} onClick={() => remove.mutate(a.asset_id)}>
                 <Trash2 size={11} />
               </button>
             </div>
           ))}
         </div>
+        <div className="cp-upload-music">
+          <label className="cp-check">
+            <Checkbox checked={rights} onCheckedChange={(v) => setRights(v === true)} />
+            <span>I have the rights to use this music in my videos.</span>
+          </label>
+          <button className="cp-button" disabled={!rights || upload.isPending} onClick={() => input.current?.click()}>
+            {upload.isPending ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
+            {upload.progress != null ? `Uploading ${Math.round(upload.progress * 100)}%` : "Upload music"}
+          </button>
+          <input ref={input} type="file" hidden accept="audio/mpeg,audio/mp3,audio/wav,audio/x-wav,audio/mp4,audio/x-m4a,audio/aac,.mp3,.wav,.m4a"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) upload.mutate({ file: f, rights: true });
+              e.target.value = "";
+            }} />
+          <p className="cp-note">MP3, WAV or M4A up to 20 MB. Platforms can still flag tracks you don’t own.</p>
+        </div>
       </Field>
-      <div className="cp-upload-music">
-        <label className="cp-check">
-          <Checkbox checked={rights} onCheckedChange={(v) => setRights(v === true)} />
-          <span>I have the rights to use this music in my videos.</span>
-        </label>
-        <button className="cp-button" disabled={!rights || upload.isPending} onClick={() => input.current?.click()}>
-          {upload.isPending ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
-          {upload.progress != null ? `Uploading ${Math.round(upload.progress * 100)}%` : "Upload music"}
-        </button>
-        <input ref={input} type="file" hidden accept="audio/mpeg,audio/mp3,audio/wav,audio/x-wav,audio/mp4,audio/x-m4a,audio/aac,.mp3,.wav,.m4a"
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) upload.mutate({ file: f, rights: true });
-            e.target.value = "";
-          }} />
-        <p className="cp-note">MP3, WAV or M4A up to 20 MB. Platforms can still flag tracks you don’t own.</p>
-      </div>
-      {m.asset_id && (
+      {chosen && (
         <>
           <Range label="Music volume" value={m.volume} min={0} max={1} step={0.05} display={`${Math.round(m.volume * 100)}%`}
             onChange={(volume) => onSettings({ music: { volume } })} />

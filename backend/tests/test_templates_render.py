@@ -118,3 +118,18 @@ def test_word_captions_highlight_each_word_in_turn():
     lines = [l for l in ass.splitlines() if l.startswith("Dialogue") and ",Caption," in l]
     assert len(lines) == 4  # one event per word, three words per line then one
     assert "ONE" in lines[0] and "Made with FrameSeek" not in ass
+
+
+def test_music_library_catalogue_is_complete():
+    from app.services.music_library import load_library
+
+    lib = load_library()
+    ids = [t["id"] for t in lib["tracks"]]
+    assert len(ids) == len(set(ids))
+    for t in lib["tracks"]:
+        assert t["licence"] == "CC0 1.0"
+        assert t["mood"] in lib["moods"]
+        assert t["source_url"].startswith("https://") and t["duration_seconds"] > 30
+    # Every template mood that expects music has tracks to suggest.
+    wanted = {t["music"]["default_mood"] for t in list_templates()} - {"none"}
+    assert wanted <= set(lib["moods"])

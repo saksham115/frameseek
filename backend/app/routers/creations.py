@@ -81,11 +81,25 @@ async def list_templates(user: User = Depends(get_active_user)):
 
 @router.get("/music")
 async def list_music(user: User = Depends(get_active_user), db: AsyncSession = Depends(get_db)):
-    """The licensed library (not available until a licence is signed) and the user's own tracks."""
+    """The stock library (public-domain tracks) and the user's own uploads."""
+    import asyncio
+
+    from app.services import music_library
+
     uploads = await CreationService(db).list_assets(user.user_id, "music")
+    allowed = template_limits(user.plan_type).music_library
+    lib = music_library.load_library()
+    urls = await asyncio.gather(*(asyncio.to_thread(music_library.playable_url, t) for t in lib["tracks"]))
     return ApiResponse(data={
-        "library_available": False,
-        "library": [],
+        "library_available": True,
+        "library_locked": not allowed,
+        "moods": lib["moods"],
+        "licence_note": lib["licence_note"],
+        "library": [
+            {k: t[k] for k in ("id", "title", "artist", "album", "mood", "duration_seconds", "licence", "source_page")}
+            | {"url": url}
+            for t, url in zip(lib["tracks"], urls)
+        ],
         "uploads": [_asset_response(a) for a in uploads],
     })
 

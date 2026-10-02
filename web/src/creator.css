@@ -55,6 +55,14 @@
   background: radial-gradient(circle at 30% 20%, hsl(var(--primary) / 0.08), transparent 60%), var(--panel);
   border-bottom: 1px solid hsl(var(--border));
 }
+.template-preview {
+  height: 160px;
+  max-width: 88%;
+  border-radius: 7px;
+  object-fit: cover;
+  background: #0c0f10;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
 .template-card-busy {
   position: absolute;
   inset: 0;
@@ -847,6 +855,62 @@
 .cp-track .icon-button {
   width: 22px;
   height: 22px;
+}
+.cp-library {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 300px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+.cp-lib-track {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px 5px 5px;
+  border-radius: 6px;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--card));
+}
+.cp-lib-track.active {
+  border-color: hsl(var(--primary));
+  background: hsl(var(--primary) / 0.06);
+}
+.cp-lib-play {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: hsl(var(--secondary));
+}
+.cp-lib-play:hover {
+  color: hsl(var(--primary));
+}
+.cp-lib-pick {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.cp-lib-pick strong {
+  font-size: 11px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cp-lib-pick span {
+  font-size: 9px;
+  color: hsl(var(--muted-foreground));
+}
+.cp-lib-check {
+  color: hsl(var(--primary));
+  flex-shrink: 0;
 }
 .cp-upload-music {
   display: flex;

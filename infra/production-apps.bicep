@@ -177,7 +177,8 @@ resource migrate 'Microsoft.App/jobs@2024-03-01' = {
       containers: [{
         name: 'migrate'
         image: apiImage
-        command: ['alembic', 'upgrade', 'head']
+        // Migrations, then copy any missing stock music into Blob (best effort, never fails).
+        command: ['python', 'app/release.py']
         resources: { cpu: json('0.5'), memory: '1Gi' }
         env: commonEnv
       }]

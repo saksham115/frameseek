@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Loader2, Sparkles } from "lucide-react";
@@ -74,6 +74,42 @@ export function TemplateArt({ recipe, format }: { recipe: TemplateRecipe; format
         );
       })()}
     </div>
+  );
+}
+
+/**
+ * A looping example of the template, rendered by our renderer from stock footage
+ * (public/template-previews). Plays only while on screen; still frame for reduced motion.
+ */
+function TemplatePreview({ recipe }: { recipe: TemplateRecipe }) {
+  const ref = useRef<HTMLVideoElement>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    const v = ref.current;
+    if (!v || typeof IntersectionObserver === "undefined") return;
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    const io = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) void v.play().catch(() => undefined);
+      else v.pause();
+    }, { threshold: 0.3 });
+    io.observe(v);
+    return () => io.disconnect();
+  }, []);
+  if (failed) return <TemplateArt recipe={recipe} />;
+  return (
+    <video
+      ref={ref}
+      className="template-preview"
+      style={{ aspectRatio: String(formatAspect(recipe.default_format)) }}
+      src={`/template-previews/${recipe.id}.mp4`}
+      poster={`/template-previews/${recipe.id}.jpg`}
+      muted
+      loop
+      playsInline
+      preload="none"
+      aria-hidden="true"
+      onError={() => setFailed(true)}
+    />
   );
 }
 
@@ -183,7 +219,11 @@ export default function TemplateGallery({
                       aria-label={`Use the ${t.name} template`}
                     >
                       <div className="template-card-art">
-                        <TemplateArt recipe={t} format={format && t.formats.includes(format) ? format : undefined} />
+                        {!format || format === t.default_format ? (
+                          <TemplatePreview recipe={t} />
+                        ) : (
+                          <TemplateArt recipe={t} format={format} />
+                        )}
                         {busy && (
                           <span className="template-card-busy">
                             <Loader2 className="animate-spin" size={16} /> Setting up…

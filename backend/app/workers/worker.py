@@ -26,9 +26,20 @@ async def enqueue_transcript_retry(video_id: str) -> None:
     await servicebus.enqueue_transcribe_video(video_id)
 
 
+async def sync_stock_music() -> None:
+    # Runs after migrations on every deploy; it must never fail the deploy.
+    from app.services.music_library import sync
+
+    try:
+        await sync()
+    except Exception:
+        logger.exception("Music library sync failed; it will retry on the next deploy")
+
+
 _SCHEDULED = {
     "retention-cleanup": cleanup_expired_content,
     "subscription-expiry": check_expired_subscriptions,
+    "sync-stock-music": sync_stock_music,
 }
 
 

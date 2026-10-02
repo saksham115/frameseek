@@ -104,6 +104,21 @@ async def _fetch(path: str | None, local_fallback: str | None, dest: Path) -> st
     raise RenderError("A video in this creation is no longer available.")
 
 
+async def _download(url: str, dest: Path) -> str:
+    import httpx
+
+    try:
+        async with httpx.AsyncClient(timeout=120, follow_redirects=True, headers={"User-Agent": "FrameSeek"}) as http:
+            async with http.stream("GET", url) as resp:
+                resp.raise_for_status()
+                with open(dest, "wb") as fh:
+                    async for chunk in resp.aiter_bytes(1 << 16):
+                        fh.write(chunk)
+    except httpx.HTTPError as exc:
+        raise RenderError("The music track couldn't be fetched. Try again, or pick another track.") from exc
+    return str(dest)
+
+
 async def render_creation(render_id: str) -> None:
     async with async_session() as db:
         row = (await db.execute(
@@ -144,7 +159,12 @@ async def render_creation(render_id: str) -> None:
             if spec.get("logo"):
                 logo_path = await _fetch(spec["logo"]["blob_path"], None, work / ("logo" + Path(spec["logo"]["blob_path"]).suffix))
             if spec.get("music"):
-                music_path = await _fetch(spec["music"]["blob_path"], None, work / ("music" + Path(spec["music"]["blob_path"]).suffix))
+                music = spec["music"]
+                if music.get("blob_path"):
+                    music_path = await _fetch(music["blob_path"], None, work / ("music" + Path(music["blob_path"]).suffix))
+                else:
+                    # A library track not copied to Blob yet: fetch it from its source.
+                    music_path = await _download(music["source_url"], work / "music.mp3")
                 if await asyncio.to_thread(probe_duration, music_path) <= 0:
                     raise RenderError("The music file couldn't be read. Try a different MP3, WAV or M4A.")
 

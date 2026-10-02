@@ -105,6 +105,7 @@ def default_settings(recipe: dict, fmt: str | None = None) -> dict:
         },
         "background": "blur" if layout.get("background") == "blur" else "brand",
         "music": {
+            "track_id": None,
             "asset_id": None,
             "volume": float(music.get("volume", 0.3)) or 0.3,
             "ducking": bool(music.get("ducking", True)),

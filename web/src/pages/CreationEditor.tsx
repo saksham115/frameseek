@@ -216,7 +216,10 @@ function Editor({ creation, catalog, onSaved }: { creation: Creation; catalog: T
   const { data: logos } = useQuery({ queryKey: ["assets", "logo"], queryFn: () => listAssets("logo") });
   const { data: music } = useQuery({ queryKey: ["music"], queryFn: getMusic });
   const logoUrl = logos?.find((l) => l.asset_id === draft.settings.branding.logo_asset_id)?.url ?? null;
-  const musicUrl = music?.uploads.find((a) => a.asset_id === draft.settings.music.asset_id)?.url ?? null;
+  const musicUrl =
+    (draft.settings.music.track_id
+      ? music?.library.find((t) => t.id === draft.settings.music.track_id)?.url
+      : music?.uploads.find((a) => a.asset_id === draft.settings.music.asset_id)?.url) ?? null;
 
   // ---------------------------------------------------------------- rendering
   const { data: renders = [] } = useQuery({

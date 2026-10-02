@@ -129,7 +129,7 @@ jobs:
           az containerapp job update \
             --name "$MIGRATION_JOB" --resource-group "$RESOURCE_GROUP" \
             --image "$ACR_NAME.azurecr.io/frameseek-api:$GITHUB_SHA" \
-            --command alembic upgrade head --output none
+            --command python app/release.py --output none
           EXECUTION=$(az containerapp job start -n "$MIGRATION_JOB" -g "$RESOURCE_GROUP" --query name -o tsv)
           echo "Migration execution: $EXECUTION" >> "$GITHUB_STEP_SUMMARY"
           for attempt in $(seq 1 90); do

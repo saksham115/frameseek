@@ -20,8 +20,9 @@ plan:
 | `templates` table seeded from the catalogue | The catalogue ships with the API (`backend/app/assets/templates/catalog.json`); each creation stores a copy of its recipe | A creation keeps its template exactly as it was, with no seeding step |
 | Word timings from Whisper (`transcript_words`) | Word times are spread across each caption line by word length | Works for every existing video and stays right when a caption is edited; real word timings can replace it later |
 | Smart-crop per shot (`shot_framing`) | Smart-crop per moment, at the moment's midpoint, stored on the moment | Azure only accepts ratios 0.75 to 1.8, so 9:16 asks for 0.75 and centres a narrower window on it |
-| Licensed music library | Own uploads only; the library endpoint reports it as unavailable | No licence is signed yet |
+| Licensed music library | A stock library of 25 public-domain (CC0) tracks by HoliznaCC0 in six moods, plus own uploads | CC0 needs no licence deal, attribution or fee, including for commercial use; a paid provider can be added later for more choice |
 | Fast 360p preview render | Not built; the browser preview uses the renderer's fonts and layout rules | The live preview proved close enough in testing |
+| Gallery cards with a looping preview | Each card plays an example rendered by the real renderer from Pexels stock footage (`web/public/template-previews`, rebuilt with `backend/scripts/build_template_previews.py`) | Shows what the template actually produces |
 | Saved presets (Pro Max) | Not built | Phase 2 |
 
 Code: API in `backend/app/routers/creations.py` and `services/creation_service.py`; renderer in
@@ -183,7 +184,11 @@ dialog says so and offers a fast 360p preview render before the full one.
 
 Music is in phase 1, and it is the main legal risk, so it has its own section.
 
-- **Library:** a curated set of tracks (start with about 100, tagged by mood, tempo, length)
+- **Built:** 25 CC0 tracks (`backend/app/assets/music/library.json`), copied into Blob by the
+  release step after each deploy (`python app/release.py`); until a track is copied, previews and
+  renders use its source on the Free Music Archive. The library is a Pro feature once
+  `TEMPLATE_LIMITS_ENFORCED` is on.
+- **Library (original plan):** a curated set of tracks (start with about 100, tagged by mood, tempo, length)
   licensed from a provider whose terms explicitly cover **use inside user-generated videos
   made in our app and posted to social platforms**, for both personal and commercial
   (marketer) use. Candidates to evaluate: royalty-free music providers with partner/API

@@ -182,4 +182,41 @@ async def test_music_upload_needs_rights_and_a_supported_type(client, test_user)
     done = await client.post(f"/api/v1/assets/{asset_id}/finalize", headers=test_user["headers"])
     assert done.status_code == 200 and done.json()["data"]["status"] == "ready"
     music = (await client.get("/api/v1/music", headers=test_user["headers"])).json()["data"]
-    assert music["library_available"] is False and len(music["uploads"]) == 1
+    assert len(music["uploads"]) == 1
+
+
+async def test_stock_music_library_is_listed_with_playable_urls(client, test_user):
+    music = (await client.get("/api/v1/music", headers=test_user["headers"])).json()["data"]
+    assert music["library_available"] is True and music["library_locked"] is False
+    assert len(music["library"]) >= 20
+    track = music["library"][0]
+    assert track["licence"] == "CC0 1.0" and track["url"]
+    assert {t["mood"] for t in music["library"]} == set(music["moods"])
+
+
+async def test_render_with_a_library_track_freezes_its_source(client, db_session, test_user, ready_video, enqueue_render):
+    from app.services.music_library import tracks
+
+    track = tracks()[0]
+    creation = await _create(client, test_user, ready_video)
+    url = f"/api/v1/creations/{creation['creation_id']}"
+    resp = await client.patch(url, json={"settings": {"music": {"track_id": track["id"]}}}, headers=test_user["headers"])
+    assert resp.json()["data"]["settings"]["music"]["track_id"] == track["id"]
+    assert (await client.post(f"{url}/render", headers=test_user["headers"])).status_code == 200
+    spec = (await db_session.execute(select(Render.spec))).scalar_one()
+    assert spec["music"]["source_url"] == track["source_url"]
+    # The test blob mock reports every blob as present, so the worker reads our copy.
+    assert spec["music"]["blob_path"] == f"clips/library/music/{track['id']}.mp3"
+
+
+async def test_library_music_needs_pro_once_limits_are_enforced(client, test_user, ready_video, enqueue_render):
+    from app.services.music_library import tracks
+
+    creation = await _create(client, test_user, ready_video)
+    url = f"/api/v1/creations/{creation['creation_id']}"
+    await client.patch(url, json={"settings": {"music": {"track_id": tracks()[0]["id"]}}}, headers=test_user["headers"])
+    with patch.object(settings, "TEMPLATE_LIMITS_ENFORCED", True):
+        music = (await client.get("/api/v1/music", headers=test_user["headers"])).json()["data"]
+        assert music["library_locked"] is True
+        resp = await client.post(f"{url}/render", headers=test_user["headers"])
+        assert resp.status_code == 403 and "music library" in resp.json()["detail"]

@@ -120,6 +120,8 @@ class TransitionSettings(_Model):
 
 
 class MusicSettings(_Model):
+    # A stock library track, or one of the user's uploads (asset_id). One at a time.
+    track_id: str | None = Field(None, max_length=80, pattern=r"^[a-z0-9-]+$")
     asset_id: uuid.UUID | None = None
     volume: float = Field(0.3, ge=0, le=1)
     ducking: bool = True

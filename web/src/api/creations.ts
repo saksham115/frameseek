@@ -145,6 +145,7 @@ export interface CreationSettings {
   transition: { type: "cut" | "crossfade" | "slide"; duration: number };
   background: "blur" | "brand";
   music: {
+    track_id: string | null;
     asset_id: string | null;
     volume: number;
     ducking: boolean;
@@ -297,8 +298,29 @@ export async function listAssets(kind: "logo" | "music") {
   return data.assets;
 }
 
+export interface LibraryTrack {
+  id: string;
+  title: string;
+  artist: string;
+  album: string;
+  mood: string;
+  duration_seconds: number;
+  licence: string;
+  source_page: string;
+  url: string;
+}
+
+export interface MusicCatalog {
+  library_available: boolean;
+  library_locked: boolean;
+  moods: string[];
+  licence_note: string;
+  library: LibraryTrack[];
+  uploads: Asset[];
+}
+
 export async function getMusic() {
-  const { data } = await api.get<{ library_available: boolean; library: unknown[]; uploads: Asset[] }>("/music");
+  const { data } = await api.get<MusicCatalog>("/music");
   return data;
 }
 

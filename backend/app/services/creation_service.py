@@ -25,6 +25,7 @@ from app.schemas.creation import (
     CreationUpdateRequest,
     Moment,
 )
+from app.services import music_library
 from app.services.framing import auto_frame_moment
 from app.services.render.layout import output_size, video_box
 from app.services.storage_service import StorageService
@@ -339,6 +340,16 @@ class CreationService:
                 if asset and asset.kind == kind and asset.status == "ready":
                     assets[key] = asset
 
+        track = None
+        track_id = (settings.get("music") or {}).get("track_id")
+        if track_id:
+            track = music_library.get_track(track_id)
+            if track and not limits.music_library:
+                raise HTTPException(
+                    status_code=403,
+                    detail="The music library is part of Pro. Choose your own music or no music to render.",
+                )
+
         res = min(int(resolution or (settings.get("export") or {}).get("resolution", 1080)), limits.max_resolution)
         await self._count_render(user, limits.monthly_renders)
         captions = await self.captions(creation) if (settings.get("captions") or {}).get("enabled") else {}
@@ -356,7 +367,8 @@ class CreationService:
                 for vid, v in videos.items()
             },
             "logo": {"blob_path": assets["logo"].blob_path} if "logo" in assets else None,
-            "music": {"blob_path": assets["music"].blob_path} if "music" in assets else None,
+            "music": music_library.render_source(track) if track
+            else {"blob_path": assets["music"].blob_path} if "music" in assets else None,
         }
         render = Render(
             creation_id=creation.creation_id, user_id=user.user_id, status="queued", progress=0,
