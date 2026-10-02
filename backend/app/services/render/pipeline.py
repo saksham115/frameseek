@@ -160,42 +160,50 @@ class Renderer:
         color = self.brand.get("accent") if panel == "brand.accent" else self.brand.get("primary", "#111827")
         return f"color=c={_hex(color)}:s={w}x{h}:r={FPS}:d={d:.3f}[bg]", "bg"
 
+    def _fits(self, m: dict) -> bool:
+        """Show the whole picture (scaled to fit, blurred copy behind) rather than crop it."""
+        if self.settings.get("framing", "fit") == "fit":
+            return True
+        return m.get("crop") is None and self.layout.get("reframe") == "none"
+
     def _moment_video(self, seg: Segment, src: Source) -> str:
         """Filtergraph for a moment's picture, ending in [v]."""
         m = seg.moment
-        crop = m.get("crop")
         box = self.box
-        fit = crop is None and self.layout.get("reframe") == "none"
         kind = self.layout.get("type", "fill")
         graph: list[str] = []
-        if kind == "fill" and not fit:
-            c = crop or {}
+        blur_backdrop = kind != "fill" and (seg.background == "blur" or self.settings.get("background") == "blur")
+        src_in = "0:v"
+        if blur_backdrop:
+            graph.append("[0:v]split=2[pic][backdrop]")
+            src_in = "pic"
+        if self._fits(m):
+            # A box-sized picture: the whole video centred on a blurred, filled copy of itself.
+            graph.append(f"[{src_in}]split=2[whole][fillsrc]")
+            graph.append(
+                f"[fillsrc]scale={box.w}:{box.h}:force_original_aspect_ratio=increase,crop={box.w}:{box.h},"
+                f"gblur=sigma={max(12, box.w // 30)},eq=brightness=-0.1,setsar=1[boxbg]"
+            )
+            graph.append(f"[whole]scale={box.w}:{box.h}:force_original_aspect_ratio=decrease,setsar=1[fitted]")
+            graph.append("[boxbg][fitted]overlay=x=(W-w)/2:y=(H-h)/2:shortest=1[fg]")
+        else:
+            c = m.get("crop") or {}
             win = crop_window(src.width, src.height, box.aspect, c.get("x", 0.5), c.get("y", 0.5), c.get("zoom", 1.0))
-            graph.append(f"[0:v]crop={win.w}:{win.h}:{win.x}:{win.y},scale={box.w}:{box.h},setsar=1[fg]")
+            graph.append(f"[{src_in}]crop={win.w}:{win.h}:{win.x}:{win.y},scale={box.w}:{box.h},setsar=1[fg]")
+        if kind == "fill":
             graph.append(f"[fg]fps={FPS},format=yuv420p[v]")
             return ";".join(graph)
 
-        graph.append("[0:v]split=2[src][srcbg]")
-        bg, bg_label = self._background(seg, "srcbg")
-        if not bg.startswith("[srcbg]"):
-            graph.append("[srcbg]nullsink")
+        # Split and frame layouts: the box sits on the panel or brand background.
+        bg, bg_label = self._background(seg, "backdrop" if blur_backdrop else None)
         graph.append(bg)
-        if fit:
-            graph.append(f"[src]scale={box.w}:{box.h}:force_original_aspect_ratio=decrease,setsar=1[fg]")
-            x = f"{box.x}+({box.w}-overlay_w)/2"
-            y = f"{box.y}+({box.h}-overlay_h)/2"
-        else:
-            c = crop or {}
-            win = crop_window(src.width, src.height, box.aspect, c.get("x", 0.5), c.get("y", 0.5), c.get("zoom", 1.0))
-            graph.append(f"[src]crop={win.w}:{win.h}:{win.x}:{win.y},scale={box.w}:{box.h},setsar=1[fg]")
-            x, y = str(box.x), str(box.y)
         if kind == "frame" and self.mask is not None:
             graph.append(f"movie={self.mask.name},format=gray,loop=-1:1:0[mask]")
             graph.append("[fg]format=yuva420p[fga];[fga][mask]alphamerge[fgr]")
             fg = "fgr"
         else:
             fg = "fg"
-        graph.append(f"[{bg_label}][{fg}]overlay=x={x}:y={y}:shortest=1,fps={FPS},format=yuv420p[v]")
+        graph.append(f"[{bg_label}][{fg}]overlay=x={box.x}:y={box.y}:shortest=1,fps={FPS},format=yuv420p[v]")
         return ";".join(graph)
 
     def _segment(self, i: int, seg: Segment) -> Path:
@@ -326,7 +334,13 @@ class Renderer:
             else:
                 graph.append("[orig][mus]amix=inputs=2:duration=first:normalize=0[mix]")
             audio = "mix"
-        graph.append(f"[{audio}]loudnorm=I=-14:TP=-1.5:LRA=11,aresample=48000[aout]")
+        audible = bool(self.music_path) or (orig_vol > 0 and any(
+            seg.moment.get("keep_audio", True) and self.sources[str(seg.moment["video_id"])].has_audio
+            for seg in tl.moments
+        ))
+        # Loudness normalisation turns pure silence into NaN, which the encoder rejects.
+        norm = "loudnorm=I=-14:TP=-1.5:LRA=11," if audible else ""
+        graph.append(f"[{audio}]{norm}aresample=48000[aout]")
 
         cmd += [
             "-filter_complex", ";".join(graph), "-map", "[vout]", "-map", "[aout]", "-t", f"{tl.duration:.3f}",

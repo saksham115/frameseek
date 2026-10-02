@@ -103,6 +103,7 @@ def default_settings(recipe: dict, fmt: str | None = None) -> dict:
             "type": transitions.get("type", "cut"),
             "duration": float(transitions.get("duration", 0.4)),
         },
+        "framing": "fit",
         "background": "blur" if layout.get("background") == "blur" else "brand",
         "music": {
             "track_id": None,

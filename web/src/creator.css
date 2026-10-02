@@ -243,6 +243,7 @@
   min-height: 0;
 }
 .cp-wrap {
+  overflow: hidden;
   flex: 1;
   min-height: 300px;
   height: calc(100dvh - 360px);
@@ -259,7 +260,7 @@
   position: relative;
   overflow: hidden;
   border-radius: 4px;
-  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4);
   user-select: none;
   container-type: size;
 }
@@ -288,6 +289,15 @@
 .cp-video-box.can-drag:active {
   cursor: grabbing;
 }
+.cp-backdrop {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: blur(14px) brightness(0.9);
+  transform: scale(1.12);
+}
 .cp-drag-hint {
   position: absolute;
   left: 50%;
@@ -305,7 +315,16 @@
   transition: opacity 0.15s;
   pointer-events: none;
 }
-.cp-video-box:hover .cp-drag-hint {
+.cp-video-box:hover .cp-backdrop {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: blur(14px) brightness(0.9);
+  transform: scale(1.12);
+}
+.cp-drag-hint {
   opacity: 1;
 }
 .cp-card {
@@ -417,8 +436,9 @@
 }
 .moment-index {
   position: absolute;
-  left: 3px;
-  top: 3px;
+  left: 4px;
+  top: 4px;
+  line-height: 1.3;
   font: 600 9px "JetBrains Mono", monospace;
   background: rgba(0, 0, 0, 0.6);
   color: #fff;
@@ -546,10 +566,15 @@
 }
 .cp-tabs {
   display: flex;
-  column-gap: 14px;
+  justify-content: space-between;
+  gap: 6px;
   overflow-x: auto;
-  padding: 0 16px;
+  scrollbar-width: none;
+  padding: 0 14px;
   border-bottom: 1px solid hsl(var(--border));
+}
+.cp-tabs::-webkit-scrollbar {
+  display: none;
 }
 .cp-tabs button {
   white-space: nowrap;
@@ -678,7 +703,8 @@
 }
 .cp-styles {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(3, 1fr);
+  grid-auto-rows: 1fr;
   gap: 6px;
 }
 .cp-style {
@@ -687,16 +713,20 @@
   align-items: flex-start;
   gap: 2px;
   text-align: left;
-  padding: 8px 10px;
+  padding: 9px 10px 8px;
+  min-height: 72px;
   border-radius: 6px;
   border: 1px solid hsl(var(--border));
   background: hsl(var(--card));
   font-size: 11px;
 }
 .cp-style span {
+  display: flex;
+  align-items: center;
+  height: 22px;
   font-size: 15px;
-  line-height: 1.2;
-  margin-bottom: 2px;
+  line-height: 1;
+  margin-bottom: 4px;
 }
 .cp-style em {
   font-style: normal;
@@ -709,7 +739,7 @@
 }
 .cp-style.is-bold-pop span { font: 800 15px "FS Montserrat"; }
 .cp-style.is-clean span { font: 600 15px "FS Inter"; }
-.cp-style.is-boxed span { font: 700 13px "FS Inter"; background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); padding: 0 5px; border-radius: 3px; }
+.cp-style.is-boxed span { font: 700 13px "FS Inter"; background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); padding: 0 6px; border-radius: 4px; }
 .cp-style.is-karaoke span { font: 700 15px "FS Poppins"; }
 .cp-style.is-quote span { font: italic 700 15px "FS Playfair Display"; }
 .cp-row {

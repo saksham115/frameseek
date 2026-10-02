@@ -153,7 +153,9 @@ function MomentsTab({ recipe, moments, onMoments, selectedMoment, videos, settin
         Moment {index + 1} · {videos[m.video_id]?.title ?? "Video"}
         <span>{formatClipTime(m.start)} to {formatClipTime(m.end)}</span>
       </div>
-      {recipe.layout.reframe !== "none" || m.crop ? (
+      {(settings.framing ?? "fit") === "fit" ? (
+        <p className="cp-note">The whole picture is shown. To crop and follow the subject, choose “Fill the frame” in the Format tab.</p>
+      ) : recipe.layout.reframe !== "none" || m.crop ? (
         <Field label="Framing" hint={m.crop_locked ? "Set by you" : "Follows the subject"}>
           <p className="cp-note">Drag the picture in the preview to choose what stays in frame.</p>
           <Range
@@ -209,6 +211,15 @@ function FormatTab({ recipe, settings, onSettings }: PanelProps) {
           ))}
         </div>
       </Field>
+      <Field label="Video" hint={(settings.framing ?? "fit") === "fit" ? "Nothing is cut off" : "Drag the picture to reframe"}>
+        <div className="cp-chips">
+          {(["fit", "fill"] as const).map((f) => (
+            <button key={f} className={cn("cp-chip", (settings.framing ?? "fit") === f && "active")} onClick={() => onSettings({ framing: f })}>
+              {f === "fit" ? "Fit whole video" : "Fill the frame"}
+            </button>
+          ))}
+        </div>
+      </Field>
       {(recipe.layout.type === "frame" || recipe.intro_card || recipe.outro_card) && (
         <Field label="Background" hint={recipe.layout.type === "frame" ? "Behind the video and cards" : "Behind the cards"}>
           <div className="cp-chips">
@@ -250,7 +261,7 @@ function CaptionsTab({ settings, onSettings, catalog, moments, videos, captions,
                 <button key={id} className={cn("cp-style", c.style === id && "active", `is-${id}`)} onClick={() => onSettings({ captions: { style: id } })}>
                   <span>{s.case === "upper" ? "ABC" : "Abc"}</span>
                   {s.label}
-                  {s.granularity === "word" && <em>word by word</em>}
+                  <em>{s.granularity === "word" ? "word by word" : "line by line"}</em>
                 </button>
               ))}
             </div>

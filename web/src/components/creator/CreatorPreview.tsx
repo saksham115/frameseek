@@ -89,6 +89,8 @@ export default function CreatorPreview({
 }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  // In fit mode, a muted, blurred copy of the same video fills the space around it.
+  const backdropRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const [wrap, setWrap] = useState({ w: 0, h: 0 });
   const [t, setT] = useState(0);
@@ -154,6 +156,17 @@ export default function CreatorPreview({
     v.muted = muted || !m.keep_audio;
     if (playing && v.paused) void v.play().catch(() => setPlaying(false));
     if (!playing && !v.paused) v.pause();
+    const b = backdropRef.current;
+    if (b) {
+      if (b.dataset.src !== activeVideo.video_url) {
+        b.dataset.src = activeVideo.video_url;
+        b.src = activeVideo.video_url;
+      }
+      b.muted = true;
+      b.currentTime = v.currentTime;
+      if (playing && b.paused) void b.play().catch(() => undefined);
+      if (!playing && !b.paused) b.pause();
+    }
   }, [seg?.moment?.id, seg?.start, activeVideo?.video_url, playing, muted, settings.music.original_audio_volume]);
 
   // Scrubbing while paused moves the picture too.
@@ -163,12 +176,15 @@ export default function CreatorPreview({
     if (!v || !seg || seg.kind !== "moment") return;
     const desired = seg.moment!.start + (t - seg.start);
     if (Math.abs(v.currentTime - desired) > 0.04) v.currentTime = desired;
+    const b = backdropRef.current;
+    if (b && Math.abs(b.currentTime - desired) > 0.04) b.currentTime = desired;
   }, [t, playing, seg]);
 
   // The clock: follow the video during moments, wall time during cards.
   useEffect(() => {
     if (!playing) {
       videoRef.current?.pause();
+      backdropRef.current?.pause();
       audioRef.current?.pause();
       return;
     }
@@ -182,6 +198,8 @@ export default function CreatorPreview({
       const v = videoRef.current;
       if (s?.kind === "moment" && v && !v.paused && v.readyState >= 2) {
         cur = s.start + (v.currentTime - s.moment!.start);
+        const b = backdropRef.current;
+        if (b && Math.abs(b.currentTime - v.currentTime) > 0.25) b.currentTime = v.currentTime;
       } else {
         cur += dt;
       }
@@ -214,12 +232,16 @@ export default function CreatorPreview({
   // ------------------------------------------------------------------ framing (drag to reframe)
   const dragRef = useRef<{ x: number; y: number; crop: Crop; id: string; scale: number; srcW: number; srcH: number } | null>(null);
   const momentCrop = (m: Moment) => (dragCrop?.id === m.id ? dragCrop.crop : m.crop);
-  const fit = recipe.layout.reframe === "none";
+  // Matches the renderer: fit unless the user chose fill (fill still fits a screen-recording
+  // template's moment that has no framing set).
+  const fitsMoment = (m: Moment) =>
+    (settings.framing ?? "fit") === "fit" || (!momentCrop(m) && recipe.layout.reframe === "none");
 
   const onPointerDown = (e: React.PointerEvent) => {
     if (!seg || seg.kind !== "moment") return;
     const m = seg.moment!;
     onSelectMoment(m.id);
+    if (fitsMoment(m)) return;
     const d = dims[activeVideo?.video_url ?? ""];
     if (!d) return;
     const boxW = box.w * stageW;
@@ -256,7 +278,7 @@ export default function CreatorPreview({
     const boxH = box.h * stageH;
     if (!d || !m) return { width: "100%", height: "100%", objectFit: "cover" };
     const crop = momentCrop(m);
-    if (fit && !crop) return { width: "100%", height: "100%", objectFit: "contain" };
+    if (fitsMoment(m)) return { position: "relative", width: "100%", height: "100%", objectFit: "contain" };
     const win = cropWindow(d.w, d.h, boxW / boxH, crop);
     const scale = boxW / win.w;
     return { position: "absolute", width: d.w * scale, height: d.h * scale, left: -win.x * scale, top: -win.y * scale, maxWidth: "none" };
@@ -386,6 +408,8 @@ export default function CreatorPreview({
   };
 
   const inMoment = seg?.kind === "moment";
+  const fitting = inMoment && fitsMoment(seg!.moment!);
+  const draggable = inMoment && !fitting;
   return (
     <div className="creator-preview">
       <div className="cp-wrap" ref={wrapRef}>
@@ -397,15 +421,24 @@ export default function CreatorPreview({
             <img className="cp-blur" src={backdropVideo.thumbnail_url} alt="" />
           )}
           <div
-            className={cn("cp-video-box", inMoment && "can-drag")}
+            className={cn("cp-video-box", draggable && "can-drag")}
             style={{ left: box.x * stageW, top: box.y * stageH, width: box.w * stageW, height: box.h * stageH, borderRadius: radius,
               visibility: inMoment ? "visible" : "hidden" }}
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
             onPointerCancel={onPointerUp}
-            title={inMoment && !fit ? "Drag to reframe" : undefined}
+            title={draggable ? "Drag to reframe" : undefined}
           >
+            <video
+              ref={backdropRef}
+              className="cp-backdrop"
+              muted
+              playsInline
+              preload="auto"
+              aria-hidden="true"
+              style={{ display: fitting ? "block" : "none" }}
+            />
             <video
               ref={videoRef}
               playsInline
@@ -417,7 +450,7 @@ export default function CreatorPreview({
                 if (v.videoWidth) setDims((d) => ({ ...d, [url]: { w: v.videoWidth, h: v.videoHeight } }));
               }}
             />
-            {inMoment && !playing && !fit && (
+            {draggable && !playing && (
               <span className="cp-drag-hint">
                 <Move size={11} /> Drag to reframe
               </span>

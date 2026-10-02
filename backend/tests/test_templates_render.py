@@ -19,6 +19,7 @@ def test_every_template_has_valid_defaults_and_a_timeline(template):
     settings = default_settings(template)
     CreationSettings.model_validate(settings)
     assert settings["format"] in template["formats"]
+    assert settings["framing"] == "fit"  # nothing is cropped unless the user chooses fill
     assert set(settings["text"]) == {l["id"] for l in template["text_layers"]}
     assert template["captions"]["style"] in caption_styles()
 

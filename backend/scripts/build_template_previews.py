@@ -103,6 +103,8 @@ def build(clips_dir: Path, out_dir: Path) -> None:
         settings = default_settings(recipe)
         settings = _merge(settings, cfg.get("settings", {}))
         settings["branding"]["logo_enabled"] = False
+        # The examples crop to the frame, which suits the stock clips' subjects.
+        settings["framing"] = "fill"
         for layer_id, value in cfg.get("text", {}).items():
             settings["text"][layer_id]["text"] = value
         for layer_id, texts in cfg.get("texts", {}).items():

@@ -143,6 +143,8 @@ export interface CreationSettings {
   intro: CardSettings;
   outro: CardSettings;
   transition: { type: "cut" | "crossfade" | "slide"; duration: number };
+  /** "fit" shows the whole picture on a blurred copy of itself; "fill" crops to the frame. */
+  framing?: "fit" | "fill";
   background: "blur" | "brand";
   music: {
     track_id: string | null;

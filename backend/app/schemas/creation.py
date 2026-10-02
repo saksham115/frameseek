@@ -144,6 +144,9 @@ class CreationSettings(_Model):
     intro: CardSettings = Field(default_factory=CardSettings)
     outro: CardSettings = Field(default_factory=CardSettings)
     transition: TransitionSettings = Field(default_factory=TransitionSettings)
+    # "fit" shows the whole picture on a blurred copy of itself; "fill" crops to the frame,
+    # centred on the subject (or where the user dragged it).
+    framing: Literal["fit", "fill"] = "fit"
     # Background behind the video for "frame" layouts and behind blurred cards.
     background: Literal["blur", "brand"] = "brand"
     music: MusicSettings = Field(default_factory=MusicSettings)
