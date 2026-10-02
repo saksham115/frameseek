@@ -26,6 +26,9 @@ class Video(Base):
     gcs_bucket: Mapped[str | None] = mapped_column(String(255))
     gcs_path: Mapped[str | None] = mapped_column(String(1000))
     file_size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    # Quick content fingerprint computed by the browser (SHA-256 of the first and last
+    # MB plus the size), used to warn about re-uploading the same file.
+    content_fingerprint: Mapped[str | None] = mapped_column(String(64), index=True)
 
     # Video Metadata
     duration_seconds: Mapped[Decimal | None] = mapped_column()

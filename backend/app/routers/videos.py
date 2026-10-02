@@ -2,7 +2,7 @@ import math
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -37,6 +37,17 @@ class UploadUrlRequest(BaseModel):
     size_bytes: int
     content_type: str | None = None
     folder_id: UUID | None = None
+    fingerprint: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+
+
+class DuplicateCheckFile(BaseModel):
+    name: str = Field(max_length=500)
+    size_bytes: int = Field(ge=0)
+    fingerprint: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+
+
+class DuplicateCheckRequest(BaseModel):
+    files: list[DuplicateCheckFile] = Field(max_length=100)
 
 
 def _to_video_response(video) -> VideoResponse:
@@ -87,9 +98,25 @@ async def create_upload_url(
     """Step 1 of upload: get a video id + a short-lived SAS PUT URL for direct-to-Blob upload."""
     service = VideoService(db)
     video, upload_url = await service.create_upload_target(
-        user.user_id, body.filename, body.size_bytes, body.content_type, body.folder_id
+        user.user_id, body.filename, body.size_bytes, body.content_type, body.folder_id,
+        content_fingerprint=body.fingerprint,
     )
     return ApiResponse(data={"video_id": str(video.video_id), "upload_url": upload_url})
+
+
+@router.post("/duplicates")
+async def check_duplicates(
+    body: DuplicateCheckRequest,
+    user: User = Depends(get_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Before uploading: which of these files are already in the user's library?"""
+    matches = await VideoService(db).find_duplicates(
+        user.user_id, [f.model_dump() for f in body.files]
+    )
+    return ApiResponse(data={"duplicates": [
+        {"index": i, "video": _to_video_response(v)} for i, v in sorted(matches.items())
+    ]})
 
 
 @router.post("/{video_id}/finalize", response_model=ApiResponse[VideoResponse])

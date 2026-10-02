@@ -3434,3 +3434,58 @@ button.import-tile {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* ---- Import: duplicate warning ---- */
+.upload-checking {
+  margin-top: 12px;
+  font-size: 11px;
+  color: hsl(var(--muted-foreground));
+}
+.duplicate-prompt {
+  margin-top: 16px;
+  padding: 14px 16px;
+  border: 1px solid #f5b94259;
+  border-radius: 8px;
+  background: linear-gradient(110deg, #f5b94214, transparent 70%);
+}
+.duplicate-prompt-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #e8a92e;
+}
+.duplicate-prompt-head strong {
+  color: hsl(var(--foreground));
+  font-weight: 600;
+}
+.duplicate-prompt ul {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0 14px;
+}
+.duplicate-prompt li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 11px;
+  color: hsl(var(--muted-foreground));
+  min-width: 0;
+}
+.duplicate-prompt li b {
+  color: hsl(var(--foreground));
+  font-weight: 500;
+}
+.duplicate-prompt li a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  color: hsl(var(--primary));
+}
+.duplicate-prompt-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}

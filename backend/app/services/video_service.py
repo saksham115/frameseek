@@ -5,7 +5,10 @@ from pathlib import Path
 from uuid import UUID
 
 from fastapi import HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.video import Video
 
 from app.config import settings
 from app.repositories.vector_db import vector_db
@@ -28,6 +31,7 @@ class VideoService:
         size_bytes: int,
         content_type: str | None = None,
         folder_id: UUID | None = None,
+        content_fingerprint: str | None = None,
     ) -> tuple:
         """Create a pending video row and return a short-lived SAS PUT URL so the browser
         uploads straight to Blob (the API never proxies the bytes)."""
@@ -55,6 +59,7 @@ class VideoService:
             source_type="upload",
             folder_id=folder_id,
             status="uploaded",
+            content_fingerprint=content_fingerprint,
         )
         gcs_path = f"videos/{user_id}/{video.video_id}/original{ext}"
         await self.repo.update(video, gcs_path=gcs_path)
@@ -81,6 +86,38 @@ class VideoService:
 
         await self.repo.update(video, file_size_bytes=actual_size, status="uploaded")
         return video
+
+    async def find_duplicates(self, user_id: UUID, files: list[dict]) -> dict[int, Video]:
+        """Map each file's index to a video the user already has with the same content.
+
+        Same fingerprint is a match. Videos uploaded before fingerprints existed match on
+        exact size plus original filename. Unfinished uploads (never finalized) don't
+        count, so a retried upload isn't flagged as its own duplicate.
+        """
+        if not files:
+            return {}
+        result = await self.repo.db.execute(
+            select(Video).where(
+                Video.user_id == user_id,
+                Video.deleted_at.is_(None),
+                Video.status != "uploaded",
+                Video.file_size_bytes.in_({f["size_bytes"] for f in files}),
+            ).order_by(Video.created_at.desc())
+        )
+        candidates = list(result.scalars().all())
+        matches: dict[int, Video] = {}
+        for i, f in enumerate(files):
+            for v in candidates:
+                if v.file_size_bytes != f["size_bytes"]:
+                    continue
+                if f.get("fingerprint") and v.content_fingerprint:
+                    same = v.content_fingerprint == f["fingerprint"]
+                else:
+                    same = v.original_filename == f["name"]
+                if same:
+                    matches[i] = v
+                    break
+        return matches
 
     async def get_video(self, video_id: UUID, user_id: UUID):
         video = await self.repo.get_by_id(video_id, user_id)

@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   ArrowUpRight,
   Check,
+  Copy,
   FileVideo,
   Folder as FolderIcon,
   LockKeyhole,
@@ -13,6 +14,14 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { listFolders } from "@/api/folders";
+import { checkDuplicates } from "@/api/videos";
+import type { Video } from "@/api/types";
+import { Button } from "@/components/ui/button";
+import { fileFingerprint } from "@/lib/fingerprint";
+import {
+  canAskForNotifications,
+  requestProcessingNotifications,
+} from "@/components/ProcessingNotifier";
 import { Progress } from "@/components/ui/progress";
 import {
   Select,
@@ -39,6 +48,14 @@ import {
 } from "@/store/uploads";
 import { cn } from "@/lib/utils";
 
+const STATUS_WORD: Record<Video["status"], string> = {
+  completed: "ready",
+  processing: "processing",
+  queued: "queued",
+  uploaded: "uploading",
+  failed: "needs attention",
+};
+
 // Radix Select items can't use "" as a value.
 const NO_FOLDER = "__none__";
 const MAX_BYTES = 500 * 1024 * 1024;
@@ -60,6 +77,11 @@ export default function ImportDialog() {
     if (open) setFolderId(preselected ?? "");
   }, [open, preselected]);
   const [dragging, setDragging] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [notifyOffer, setNotifyOffer] = useState(canAskForNotifications);
+  const [duplicates, setDuplicates] = useState<
+    { file: File; fingerprint: string | null; existing: Video }[]
+  >([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const user = useAuth((s) => s.user);
   const { items, enqueue, cancel, retry, dismiss, clearFinished } = useUploads();
@@ -75,7 +97,7 @@ export default function ImportDialog() {
       pendingUploadBytes(items),
   );
 
-  const pick = (list: FileList | null) => {
+  const pick = async (list: FileList | null) => {
     const files = Array.from(list ?? []);
     if (!files.length) return;
     let budget = remainingBytes;
@@ -101,8 +123,30 @@ export default function ImportDialog() {
         accepted.push(f);
       }
     }
-    if (accepted.length) enqueue(accepted, folderId || null);
     if (inputRef.current) inputRef.current.value = "";
+    if (!accepted.length) return;
+
+    // Warn before uploading something that's already in the library. If the check
+    // itself fails, upload anyway rather than block the user.
+    setChecking(true);
+    const withPrints = await Promise.all(
+      accepted.map(async (file) => ({ file, fingerprint: await fileFingerprint(file) })),
+    );
+    let matches: Awaited<ReturnType<typeof checkDuplicates>> = [];
+    try {
+      matches = await checkDuplicates(
+        withPrints.map(({ file, fingerprint }) => ({ name: file.name, size_bytes: file.size, fingerprint })),
+      );
+    } catch {
+      matches = [];
+    } finally {
+      setChecking(false);
+    }
+    const dupIndexes = new Map(matches.map((m) => [m.index, m.video]));
+    const fresh = withPrints.filter((_, i) => !dupIndexes.has(i));
+    if (fresh.length) enqueue(fresh, folderId || null);
+    const dups = withPrints.flatMap((f, i) => (dupIndexes.has(i) ? [{ ...f, existing: dupIndexes.get(i)! }] : []));
+    if (dups.length) setDuplicates(dups);
   };
 
   return (
@@ -183,6 +227,61 @@ export default function ImportDialog() {
             hidden
             onChange={(e) => pick(e.target.files)}
           />
+          {checking && (
+            <p className="upload-checking" role="status">
+              Checking your library…
+            </p>
+          )}
+          {duplicates.length > 0 && (
+            <div className="duplicate-prompt" role="alertdialog" aria-labelledby="duplicate-title">
+              <div className="duplicate-prompt-head">
+                <Copy size={16} />
+                <strong id="duplicate-title">
+                  {duplicates.length === 1
+                    ? "You’ve already uploaded this video"
+                    : `You’ve already uploaded ${duplicates.length} of these videos`}
+                </strong>
+              </div>
+              <ul>
+                {duplicates.map(({ file, existing }) => (
+                  <li key={file.name + file.size}>
+                    <span className="truncate">
+                      <b>{file.name}</b> is in your library as “{existing.title}” (
+                      {STATUS_WORD[existing.status]},{" "}
+                      {new Date(existing.created_at).toLocaleDateString(undefined, {
+                        day: "numeric",
+                        month: "short",
+                      })}
+                      )
+                    </span>
+                    <Link
+                      to={`/videos/${existing.id}`}
+                      onClick={() => useImportDialog.getState().hide()}
+                    >
+                      Open <ArrowUpRight size={12} />
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+              <div className="duplicate-prompt-actions">
+                <Button variant="outline" className="studio-button" onClick={() => setDuplicates([])}>
+                  Skip {duplicates.length === 1 ? "it" : "them"}
+                </Button>
+                <Button
+                  className="studio-button"
+                  onClick={() => {
+                    enqueue(
+                      duplicates.map(({ file, fingerprint }) => ({ file, fingerprint })),
+                      folderId || null,
+                    );
+                    setDuplicates([]);
+                  }}
+                >
+                  Upload anyway
+                </Button>
+              </div>
+            </div>
+          )}
           {items.length > 0 && (
             <div className="upload-queue" aria-live="polite">
               <div className="section-caption mt-6">
@@ -191,11 +290,24 @@ export default function ImportDialog() {
                     ? `Uploading ${active.length} of ${items.length}`
                     : "Uploads finished"}
                 </span>
-                {items.length > active.length && (
-                  <button className="underline" onClick={clearFinished}>
-                    Clear finished
-                  </button>
-                )}
+                <span className="flex gap-4">
+                  {notifyOffer && (
+                    <button
+                      className="underline"
+                      onClick={() => {
+                        requestProcessingNotifications();
+                        setNotifyOffer(false);
+                      }}
+                    >
+                      Notify me when it’s ready
+                    </button>
+                  )}
+                  {items.length > active.length && (
+                    <button className="underline" onClick={clearFinished}>
+                      Clear finished
+                    </button>
+                  )}
+                </span>
               </div>
               {items.map((item) => (
                 <UploadRow

@@ -133,6 +133,7 @@ export async function createUploadTarget(
   sizeBytes: number,
   contentType: string,
   folderId?: string | null,
+  fingerprint?: string | null,
 ) {
   const { data } = await api.post<{ video_id: string; upload_url: string }>(
     "/videos/upload-url",
@@ -141,6 +142,7 @@ export async function createUploadTarget(
       size_bytes: sizeBytes,
       content_type: contentType,
       folder_id: folderId || undefined,
+      fingerprint: fingerprint || undefined,
     },
   );
   return data;
@@ -174,6 +176,22 @@ export async function finalizeUpload(
     signal,
   });
   return mapVideo(data as never);
+}
+
+export interface DuplicateMatch {
+  /** Index into the files that were checked. */
+  index: number;
+  video: Video;
+}
+/** Which of these files are already in the library (same content, or same name and size). */
+export async function checkDuplicates(
+  files: { name: string; size_bytes: number; fingerprint: string | null }[],
+): Promise<DuplicateMatch[]> {
+  const { data } = await api.post<{ duplicates: { index: number; video: unknown }[] }>(
+    "/videos/duplicates",
+    { files: files.map((f) => ({ ...f, fingerprint: f.fingerprint || undefined })) },
+  );
+  return (data.duplicates ?? []).map((d) => ({ index: d.index, video: mapVideo(d.video as never) }));
 }
 
 export async function deleteVideo(id: string): Promise<void> {

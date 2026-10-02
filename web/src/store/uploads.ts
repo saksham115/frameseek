@@ -23,6 +23,7 @@ export interface UploadItem {
   id: string;
   file: File;
   folderId: string | null;
+  fingerprint: string | null;
   status: UploadStatus;
   progress: number;
   videoId?: string;
@@ -36,7 +37,7 @@ const controllers = new Map<string, AbortController>();
 
 interface UploadState {
   items: UploadItem[];
-  enqueue: (files: File[], folderId: string | null) => void;
+  enqueue: (files: { file: File; fingerprint: string | null }[], folderId: string | null) => void;
   cancel: (id: string) => void;
   retry: (id: string) => void;
   dismiss: (id: string) => void;
@@ -87,6 +88,7 @@ export const useUploads = create<UploadState>((set, get) => {
         item.file.size,
         item.file.type,
         item.folderId,
+        item.fingerprint,
       );
       videoId = target.video_id;
       patch(id, { videoId });
@@ -105,7 +107,8 @@ export const useUploads = create<UploadState>((set, get) => {
       queryClient.invalidateQueries({ queryKey: ["folders"] });
       useAuth.getState().loadSession();
       const doneId = videoId;
-      toast.success(`“${item.file.name}” is in. We’re preparing it now.`, {
+      toast.success(`“${item.file.name}” uploaded. Processing has started.`, {
+        description: "We’ll let you know when it’s ready to search.",
         action: { label: "Open", onClick: () => navigateTo(`/videos/${doneId}`) },
       });
     } catch (error) {
@@ -144,9 +147,10 @@ export const useUploads = create<UploadState>((set, get) => {
       set((s) => ({
         items: [
           ...s.items,
-          ...files.map((file) => ({
+          ...files.map(({ file, fingerprint }) => ({
             id: crypto.randomUUID(),
             file,
+            fingerprint,
             folderId,
             status: "queued" as const,
             progress: 0,

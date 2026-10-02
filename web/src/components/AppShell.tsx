@@ -23,6 +23,7 @@ import { isActiveUpload, useUploads } from "@/store/uploads";
 import { useTour } from "@/store/tour";
 import FeedbackDialog from "@/components/FeedbackDialog";
 import ImportDialog from "@/components/ImportDialog";
+import ProcessingNotifier from "@/components/ProcessingNotifier";
 import { useImportDialog } from "@/store/importDialog";
 import ProductTour from "@/components/ProductTour";
 import { cn } from "@/lib/utils";
@@ -357,6 +358,7 @@ export default function AppShell() {
         </main>
         <ProductTour />
         <ImportDialog />
+        <ProcessingNotifier />
       </div>
     </div>
   );
