@@ -137,6 +137,10 @@ class GCSClient:
             fh.write(client.download_blob().readall())
         logger.info("Downloaded %s/%s -> %s", container, blob, local_path)
 
+    def download_bytes(self, gcs_path: str) -> bytes:
+        container, blob = self._split(gcs_path)
+        return self._svc.get_blob_client(container=container, blob=blob).download_blob().readall()
+
     def delete_prefix(self, prefix: str) -> int:
         container, blob_prefix = self._split(prefix)
         container_client = self._svc.get_container_client(container)

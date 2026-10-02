@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
   Check,
+  Clapperboard,
   ChevronLeft,
   ChevronRight,
   Copy,
@@ -44,6 +45,7 @@ import VideoActionsMenu, { useVideoMutations } from "@/components/VideoActions";
 import { apiErrorMessage, errorStatus } from "@/lib/errors";
 import { parseClipParam, shotAt, shotClipRange } from "@/lib/shots";
 import RequestMoreSearches from "@/components/RequestMoreSearches";
+import TemplateGallery from "@/components/creator/TemplateGallery";
 
 const QUOTA_EXHAUSTED = "quota-exhausted";
 import "@/clip-tools.css";
@@ -63,6 +65,7 @@ export default function VideoDetail() {
   const [clipRange, setClipRange] = useState<ClipRange>([0, 0]);
   const [previewingClip, setPreviewingClip] = useState(false);
   const [exportingClip, setExportingClip] = useState(false);
+  const [creating, setCreating] = useState(false);
   const clipPreviewRef = useRef<ClipRange | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -433,6 +436,15 @@ export default function VideoDetail() {
               onDeleted={() => navigate("/", { replace: true })}
             />
           )}
+          <Button
+            className="studio-button"
+            variant="outline"
+            disabled={!ready || !clipDuration}
+            onClick={() => setCreating(true)}
+            title="Turn this selection into a short, reel or brand video"
+          >
+            <Clapperboard size={14} /> Create
+          </Button>
           <Button
             className="studio-button editor-export-trigger"
             disabled={!ready || !clipDuration}
@@ -1111,6 +1123,24 @@ export default function VideoDetail() {
           </div>
         </aside>
       </div>
+      {video && (
+        <TemplateGallery
+          open={creating}
+          onOpenChange={setCreating}
+          sourceTitle={video.title}
+          moments={[
+            clipRange[1] > clipRange[0]
+              ? { video_id: video.id, start: clipRange[0], end: clipRange[1] }
+              : // No selection yet: start from the shot under the playhead.
+                (() => {
+                  const shot = shotAt(shots, currentTime);
+                  const start = shot ? shot.start_seconds : currentTime;
+                  const end = Math.min(clipDuration, Math.max(start + 1, shot ? shot.end_seconds : start + 10));
+                  return { video_id: video.id, start, end };
+                })(),
+          ]}
+        />
+      )}
     </div>
   );
 }

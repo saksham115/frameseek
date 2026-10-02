@@ -69,12 +69,14 @@ import { formatBytes, formatTimestamp } from "@/lib/format";
 import { useAuth } from "@/store/auth";
 import { useImportDialog } from "@/store/importDialog";
 import { cn } from "@/lib/utils";
+import CreationsGrid from "@/components/creator/CreationsGrid";
 
 const FILTERS = [
   { id: "", label: "All videos" },
   { id: "ready", label: "Ready" },
   { id: "processing", label: "Processing" },
   { id: "error", label: "Needs attention" },
+  { id: "creations", label: "Creations" },
 ];
 const SORTS = ["newest", "oldest", "name"];
 const VIEW_KEY = "frameseek:library-view";
@@ -139,6 +141,7 @@ export default function Library() {
         q,
       }),
     placeholderData: keepPreviousData,
+    enabled: filter !== "creations",
     refetchInterval: (query) =>
       query.state.data?.videos.some((v) => IN_FLIGHT.includes(v.status)) ||
       filter === "processing"
@@ -178,11 +181,13 @@ export default function Library() {
         }
       />
       <StorageBanner />
-      <FolderBar
-        folders={folders ?? []}
-        activeId={folderId}
-        onSelect={(id) => update({ folder: id })}
-      />
+      {filter !== "creations" && (
+        <FolderBar
+          folders={folders ?? []}
+          activeId={folderId}
+          onSelect={(id) => update({ folder: id })}
+        />
+      )}
       <div className="library-toolbar">
         <div className="filter-tabs" aria-label="Filter videos">
           {FILTERS.map((f) => (
@@ -196,7 +201,7 @@ export default function Library() {
             </button>
           ))}
         </div>
-        <div className="library-tools">
+        <div className="library-tools" style={filter === "creations" ? { display: "none" } : undefined}>
           <label className="library-find">
             <Search size={13} />
             <input
@@ -242,6 +247,10 @@ export default function Library() {
           </div>
         </div>
       </div>
+      {filter === "creations" ? (
+        <CreationsGrid />
+      ) : (
+      <>
       <div className="section-caption">
         <span>
           {activeFolder?.name ??
@@ -374,6 +383,8 @@ export default function Library() {
           )}
         </div>
       </div>
+      </>
+      )}
     </div>
   );
 }

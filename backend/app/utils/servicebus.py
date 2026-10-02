@@ -33,7 +33,11 @@ async def _run_inline(body: dict) -> None:
     from app.workers import video_processor
 
     try:
-        if body.get("type") == "process_video":
+        if body.get("type") == "render_creation":
+            from app.workers import render_worker
+
+            await render_worker.render_creation(body["render_id"])
+        elif body.get("type") == "process_video":
             await video_processor.process_video(body["job_id"])
         elif body.get("type") == "transcribe_video":
             await video_processor.transcribe_video_standalone(body["video_id"])
@@ -55,3 +59,7 @@ async def enqueue_process_video(job_id: str) -> None:
 
 async def enqueue_transcribe_video(video_id: str) -> None:
     await enqueue({"type": "transcribe_video", "video_id": str(video_id)})
+
+
+async def enqueue_render(render_id: str) -> None:
+    await enqueue({"type": "render_creation", "render_id": str(render_id)})

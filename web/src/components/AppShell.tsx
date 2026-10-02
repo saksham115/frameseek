@@ -40,9 +40,10 @@ export default function AppShell() {
   const bodyRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const location = useLocation();
-  const isEditor = location.pathname.startsWith("/videos/");
+  const isCreator = location.pathname.startsWith("/create/");
+  const isEditor = location.pathname.startsWith("/videos/") || isCreator;
   const pageName = isEditor
-    ? "Video workspace"
+    ? isCreator ? "Creation" : "Video workspace"
     : ({
         "/": "Media library",
         "/search": "Visual search",

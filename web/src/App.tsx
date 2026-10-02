@@ -9,6 +9,7 @@ import Login from "@/pages/Login";
 import Library from "@/pages/Library";
 import Search from "@/pages/Search";
 import VideoDetail from "@/pages/VideoDetail";
+import CreationEditor from "@/pages/CreationEditor";
 import Settings from "@/pages/Settings";
 import Paywall from "@/pages/Paywall";
 import NotFound from "@/pages/NotFound";
@@ -94,6 +95,7 @@ const App = () => {
         <Route path="/search" element={<Search />} />
         <Route path="/upload" element={<OpenImportDialog />} />
         <Route path="/videos/:id" element={<VideoDetail />} />
+        <Route path="/create/:id" element={<CreationEditor />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/upgrade" element={<Paywall />} />
         <Route path="/login" element={<Navigate to="/" replace />} />

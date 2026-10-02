@@ -26,6 +26,9 @@ class User(Base):
     search_bonus: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
     search_bonus_requests: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
     search_count_reset_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
+    # Template renders queued this month (reset at the first render of a new month).
+    monthly_render_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    render_count_reset_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
 
     retention_days: Mapped[int] = mapped_column(Integer, default=15)
 

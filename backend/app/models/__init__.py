@@ -10,5 +10,6 @@ from app.models.subscription import Subscription
 from app.models.account_deletion_feedback import AccountDeletionFeedback
 from app.models.user_feedback import UserFeedback
 from app.models.search_quota_request import SearchQuotaRequest
+from app.models.creation import Creation, Render, UserAsset
 
-__all__ = ["User", "Video", "Frame", "Job", "Folder", "SearchHistory", "UserAnalytics", "Clip", "TranscriptSegment", "Subscription", "AccountDeletionFeedback", "UserFeedback", "SearchQuotaRequest"]
+__all__ = ["User", "Video", "Frame", "Job", "Folder", "SearchHistory", "UserAnalytics", "Clip", "TranscriptSegment", "Subscription", "AccountDeletionFeedback", "UserFeedback", "SearchQuotaRequest", "Creation", "Render", "UserAsset"]

@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -11,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.models.account_deletion_feedback import AccountDeletionFeedback
+from app.models.creation import Creation, UserAsset
 from app.models.folder import Folder
 from app.models.search_history import SearchHistory, UserAnalytics
 from app.models.subscription import Subscription
@@ -21,6 +23,7 @@ from app.repositories.vector_db import vector_db
 from app.schemas.auth import UserResponse
 from app.services.video_service import VideoService
 from app.utils import sessions
+from app.utils.gcs_client import GCSClient
 from app.utils.security import create_access_token, create_refresh_token, decode_token
 
 logger = logging.getLogger(__name__)
@@ -182,6 +185,16 @@ class AuthService:
                 await video_service.delete_video(video.video_id, user_id)
             except Exception:
                 logger.exception("Failed to delete video %s during account deletion", video.video_id)
+
+        # Rendered creations and uploaded logos/music (rows go with the user via cascades).
+        if GCSClient.is_enabled():
+            for prefix in (f"clips/renders/{user_id}/", f"clips/assets/{user_id}/"):
+                try:
+                    await asyncio.to_thread(GCSClient.get().delete_prefix, prefix)
+                except Exception:
+                    logger.exception("Failed to delete %s during account deletion", prefix)
+        await db.execute(delete(Creation).where(Creation.user_id == user_id))
+        await db.execute(delete(UserAsset).where(UserAsset.user_id == user_id))
 
         try:
             vector_db.delete_collection(str(user_id))

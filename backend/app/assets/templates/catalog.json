@@ -1,0 +1,375 @@
+{
+  "schema_version": 1,
+  "caption_styles": {
+    "bold-pop": {
+      "label": "Bold pop",
+      "granularity": "word",
+      "font": "Montserrat ExtraBold",
+      "case": "upper",
+      "size": "large",
+      "color": "#FFFFFF",
+      "active_word_color": "brand.accent",
+      "outline": { "color": "#000000", "width": 6 },
+      "words_per_line": 3,
+      "animation": "pop"
+    },
+    "clean": {
+      "label": "Clean",
+      "granularity": "sentence",
+      "font": "Inter SemiBold",
+      "case": "as-is",
+      "size": "medium",
+      "color": "#FFFFFF",
+      "shadow": { "color": "#000000B3", "blur": 8 },
+      "max_lines": 2
+    },
+    "boxed": {
+      "label": "Boxed",
+      "granularity": "sentence",
+      "font": "Inter Bold",
+      "case": "as-is",
+      "size": "medium",
+      "color": "#FFFFFF",
+      "box": { "color": "brand.primary", "radius": 10, "padding": 14 },
+      "max_lines": 2
+    },
+    "karaoke": {
+      "label": "Karaoke",
+      "granularity": "word",
+      "font": "Poppins Bold",
+      "case": "as-is",
+      "size": "large",
+      "color": "#FFFFFFB3",
+      "active_word_color": "#FFFFFF",
+      "outline": { "color": "#000000", "width": 4 },
+      "max_lines": 2
+    },
+    "quote": {
+      "label": "Quote",
+      "granularity": "sentence",
+      "font": "Playfair Display SemiBold Italic",
+      "case": "as-is",
+      "size": "large",
+      "color": "#FFFFFF",
+      "quote_marks": true,
+      "max_lines": 4
+    }
+  },
+  "fonts": [
+    "Inter",
+    "Montserrat",
+    "Poppins",
+    "Playfair Display",
+    "Bebas Neue",
+    "DM Serif Display"
+  ],
+  "templates": [
+    {
+      "id": "hook-and-caption",
+      "version": 1,
+      "name": "Hook & Caption",
+      "audience": ["creators"],
+      "category": "short",
+      "description": "Talking-head short with a scroll-stopping hook and word-by-word captions.",
+      "formats": ["9:16", "1:1"],
+      "default_format": "9:16",
+      "moments": { "min": 1, "max": 3, "max_total_seconds": 90 },
+      "layout": { "type": "fill", "reframe": "subject" },
+      "captions": { "enabled": true, "style": "bold-pop", "position": "lower-middle" },
+      "text_layers": [
+        {
+          "id": "hook",
+          "role": "hook",
+          "default_text": "Wait for it…",
+          "timing": { "from": "start", "duration": 2.5 },
+          "style": { "font": "Bebas Neue", "size": "xl", "position": "top", "box": "brand.primary" }
+        }
+      ],
+      "branding": { "logo": { "position": "top-right", "opacity": 0.85, "default_enabled": false } },
+      "transitions": { "type": "cut" },
+      "intro_card": null,
+      "outro_card": { "enabled": false, "default_text": "Follow for more" },
+      "music": { "default_mood": "upbeat", "volume": 0.18, "ducking": true, "fade_in": 0.5, "fade_out": 1.0, "leads": false },
+      "panel": ["moments", "format", "captions", "text", "branding", "music", "export"]
+    },
+    {
+      "id": "podcast-split",
+      "version": 1,
+      "name": "Podcast Clip",
+      "audience": ["creators", "marketers"],
+      "category": "short",
+      "description": "Speaker on top, big readable captions in a panel below, episode title bar.",
+      "formats": ["9:16"],
+      "default_format": "9:16",
+      "moments": { "min": 1, "max": 1, "max_total_seconds": 120 },
+      "layout": { "type": "split", "video_ratio": 0.62, "panel_background": "brand.primary", "reframe": "subject" },
+      "captions": { "enabled": true, "style": "karaoke", "position": "panel-center" },
+      "text_layers": [
+        {
+          "id": "show-title",
+          "role": "title",
+          "default_text": "Episode title",
+          "timing": { "from": "start", "duration": "full" },
+          "style": { "font": "Inter Bold", "size": "small", "position": "panel-top" }
+        },
+        {
+          "id": "speaker",
+          "role": "lower_third",
+          "default_text": "Speaker name",
+          "timing": { "from": "start", "duration": 4 },
+          "style": { "font": "Inter SemiBold", "size": "small", "position": "video-bottom-left" }
+        }
+      ],
+      "branding": { "logo": { "position": "panel-bottom-right", "opacity": 1.0, "default_enabled": true } },
+      "transitions": { "type": "cut" },
+      "intro_card": null,
+      "outro_card": { "enabled": true, "default_text": "Full episode on our channel", "duration": 2.5 },
+      "music": { "default_mood": "none", "volume": 0.0, "ducking": true, "fade_in": 0, "fade_out": 0.8, "leads": false },
+      "panel": ["moments", "captions", "text", "branding", "music", "export"]
+    },
+    {
+      "id": "highlight-reel",
+      "version": 1,
+      "name": "Highlight Reel",
+      "audience": ["creators"],
+      "category": "reel",
+      "description": "Your best moments, cut to music with quick crossfades and a title card.",
+      "formats": ["9:16", "16:9", "1:1"],
+      "default_format": "9:16",
+      "moments": { "min": 3, "max": 12, "max_total_seconds": 90, "max_moment_seconds": 12 },
+      "layout": { "type": "fill", "reframe": "subject" },
+      "captions": { "enabled": false, "style": "clean", "position": "bottom" },
+      "text_layers": [
+        {
+          "id": "title",
+          "role": "title",
+          "default_text": "Highlights",
+          "timing": { "from": "start", "duration": 2.0 },
+          "style": { "font": "Bebas Neue", "size": "xl", "position": "center", "animation": "fade-up" }
+        }
+      ],
+      "branding": { "logo": { "position": "bottom-right", "opacity": 0.8, "default_enabled": false } },
+      "transitions": { "type": "crossfade", "duration": 0.35 },
+      "intro_card": null,
+      "outro_card": { "enabled": true, "default_text": "See you next time", "duration": 2.0 },
+      "music": { "default_mood": "energetic", "volume": 0.85, "ducking": false, "fade_in": 0.3, "fade_out": 2.0, "leads": true, "original_audio_volume": 0.25 },
+      "panel": ["moments", "format", "captions", "text", "branding", "music", "export"]
+    },
+    {
+      "id": "clean-subtitles",
+      "version": 1,
+      "name": "Clean Subtitles",
+      "audience": ["creators", "marketers"],
+      "category": "short",
+      "description": "Any clip, any format, with tidy accessible subtitles and nothing else.",
+      "formats": ["9:16", "1:1", "4:5", "16:9"],
+      "default_format": "16:9",
+      "moments": { "min": 1, "max": 1, "max_total_seconds": 600 },
+      "layout": { "type": "fill", "reframe": "subject" },
+      "captions": { "enabled": true, "style": "clean", "position": "bottom" },
+      "text_layers": [],
+      "branding": { "logo": { "position": "top-right", "opacity": 0.7, "default_enabled": false } },
+      "transitions": { "type": "cut" },
+      "intro_card": null,
+      "outro_card": null,
+      "music": { "default_mood": "none", "volume": 0.0, "ducking": true, "fade_in": 0, "fade_out": 0, "leads": false },
+      "panel": ["moments", "format", "captions", "branding", "music", "export"]
+    },
+    {
+      "id": "vlog-recap",
+      "version": 1,
+      "name": "Vlog Recap",
+      "audience": ["creators"],
+      "category": "reel",
+      "description": "A warm recap of a trip or day: place and date lower thirds, soft transitions.",
+      "formats": ["16:9", "9:16"],
+      "default_format": "16:9",
+      "moments": { "min": 3, "max": 15, "max_total_seconds": 180, "max_moment_seconds": 20 },
+      "layout": { "type": "fill", "reframe": "subject" },
+      "captions": { "enabled": false, "style": "clean", "position": "bottom" },
+      "text_layers": [
+        {
+          "id": "place",
+          "role": "lower_third",
+          "default_text": "Location",
+          "timing": { "per_moment": true, "from": "moment_start", "duration": 3 },
+          "style": { "font": "DM Serif Display", "size": "medium", "position": "bottom-left" }
+        },
+        {
+          "id": "title",
+          "role": "title",
+          "default_text": "A day in…",
+          "timing": { "from": "start", "duration": 2.5 },
+          "style": { "font": "DM Serif Display", "size": "xl", "position": "center", "animation": "fade" }
+        }
+      ],
+      "branding": { "logo": { "position": "bottom-right", "opacity": 0.7, "default_enabled": false } },
+      "transitions": { "type": "crossfade", "duration": 0.6 },
+      "intro_card": null,
+      "outro_card": { "enabled": true, "default_text": "Thanks for watching", "duration": 2.5 },
+      "music": { "default_mood": "chill", "volume": 0.6, "ducking": true, "fade_in": 1.0, "fade_out": 2.5, "leads": true, "original_audio_volume": 0.5 },
+      "panel": ["moments", "format", "captions", "text", "branding", "music", "export"]
+    },
+    {
+      "id": "product-spotlight",
+      "version": 1,
+      "name": "Product Spotlight",
+      "audience": ["marketers"],
+      "category": "brand",
+      "description": "Show off a product: branded frame, headline, feature callouts per moment, and a call to action.",
+      "formats": ["1:1", "4:5", "9:16"],
+      "default_format": "4:5",
+      "moments": { "min": 1, "max": 5, "max_total_seconds": 45, "max_moment_seconds": 12 },
+      "layout": { "type": "frame", "background": "brand.primary", "inset_margin": 0.06, "corner_radius": 18, "reframe": "subject" },
+      "captions": { "enabled": false, "style": "boxed", "position": "bottom" },
+      "text_layers": [
+        {
+          "id": "headline",
+          "role": "title",
+          "default_text": "Meet the new…",
+          "timing": { "from": "start", "duration": "full" },
+          "style": { "font": "Montserrat ExtraBold", "size": "large", "position": "frame-top" }
+        },
+        {
+          "id": "feature",
+          "role": "bullet",
+          "default_text": "Feature",
+          "timing": { "per_moment": true, "from": "moment_start", "duration": "moment" },
+          "style": { "font": "Inter SemiBold", "size": "medium", "position": "frame-bottom", "box": "brand.accent" }
+        },
+        {
+          "id": "cta",
+          "role": "cta",
+          "default_text": "Shop now · yourbrand.com",
+          "timing": { "from": "outro" },
+          "style": { "font": "Montserrat ExtraBold", "size": "large", "position": "center" }
+        }
+      ],
+      "branding": { "logo": { "position": "frame-top-left", "opacity": 1.0, "default_enabled": true, "required": true } },
+      "transitions": { "type": "slide", "duration": 0.3 },
+      "intro_card": null,
+      "outro_card": { "enabled": true, "default_text": "Shop now", "duration": 3.0, "background": "brand.primary" },
+      "music": { "default_mood": "upbeat", "volume": 0.5, "ducking": true, "fade_in": 0.3, "fade_out": 1.5, "leads": true, "original_audio_volume": 0.6 },
+      "panel": ["moments", "format", "captions", "text", "branding", "music", "export"]
+    },
+    {
+      "id": "customer-testimonial",
+      "version": 1,
+      "name": "Customer Testimonial",
+      "audience": ["marketers"],
+      "category": "brand",
+      "description": "A customer in their own words: quote-style captions, name and role, brand accents.",
+      "formats": ["4:5", "9:16", "1:1", "16:9"],
+      "default_format": "4:5",
+      "moments": { "min": 1, "max": 3, "max_total_seconds": 90 },
+      "layout": { "type": "fill", "reframe": "subject" },
+      "captions": { "enabled": true, "style": "quote", "position": "lower-middle" },
+      "text_layers": [
+        {
+          "id": "name",
+          "role": "lower_third",
+          "default_text": "Customer name · Role, Company",
+          "timing": { "from": "start", "duration": 5 },
+          "style": { "font": "Inter Bold", "size": "small", "position": "bottom-left", "accent_bar": "brand.accent" }
+        }
+      ],
+      "branding": { "logo": { "position": "top-right", "opacity": 0.9, "default_enabled": true } },
+      "transitions": { "type": "crossfade", "duration": 0.4 },
+      "intro_card": null,
+      "outro_card": { "enabled": true, "default_text": "Join thousands of happy customers", "duration": 3.0, "background": "brand.primary" },
+      "music": { "default_mood": "warm", "volume": 0.15, "ducking": true, "fade_in": 1.0, "fade_out": 2.0, "leads": false },
+      "panel": ["moments", "format", "captions", "text", "branding", "music", "export"]
+    },
+    {
+      "id": "event-highlights",
+      "version": 1,
+      "name": "Event Highlights",
+      "audience": ["marketers", "creators"],
+      "category": "reel",
+      "description": "Event recap with name and date title card, sponsor or organiser logo, upbeat cuts.",
+      "formats": ["16:9", "9:16", "1:1"],
+      "default_format": "16:9",
+      "moments": { "min": 4, "max": 20, "max_total_seconds": 180, "max_moment_seconds": 10 },
+      "layout": { "type": "fill", "reframe": "subject" },
+      "captions": { "enabled": false, "style": "clean", "position": "bottom" },
+      "text_layers": [
+        {
+          "id": "event",
+          "role": "title",
+          "default_text": "Event name · Date · City",
+          "timing": { "from": "intro" },
+          "style": { "font": "Bebas Neue", "size": "xl", "position": "center" }
+        }
+      ],
+      "branding": { "logo": { "position": "bottom-right", "opacity": 0.9, "default_enabled": true } },
+      "transitions": { "type": "crossfade", "duration": 0.3 },
+      "intro_card": { "enabled": true, "duration": 2.5, "background": "blurred-first-moment" },
+      "outro_card": { "enabled": true, "default_text": "See you next year", "duration": 2.5, "background": "brand.primary" },
+      "music": { "default_mood": "energetic", "volume": 0.8, "ducking": false, "fade_in": 0.3, "fade_out": 2.0, "leads": true, "original_audio_volume": 0.2 },
+      "panel": ["moments", "format", "captions", "text", "branding", "music", "export"]
+    },
+    {
+      "id": "tutorial-steps",
+      "version": 1,
+      "name": "Step-by-Step Tutorial",
+      "audience": ["marketers", "creators"],
+      "category": "brand",
+      "description": "One moment per step, with numbered step badges and titles, captions and a logo.",
+      "formats": ["16:9", "9:16"],
+      "default_format": "16:9",
+      "moments": { "min": 2, "max": 10, "max_total_seconds": 600 },
+      "layout": { "type": "fill", "reframe": "none" },
+      "captions": { "enabled": true, "style": "clean", "position": "bottom" },
+      "text_layers": [
+        {
+          "id": "step",
+          "role": "step_badge",
+          "default_text": "Step {n}: Title",
+          "timing": { "per_moment": true, "from": "moment_start", "duration": 4 },
+          "style": { "font": "Inter Bold", "size": "medium", "position": "top-left", "box": "brand.primary" }
+        }
+      ],
+      "branding": { "logo": { "position": "top-right", "opacity": 0.8, "default_enabled": true } },
+      "transitions": { "type": "cut" },
+      "intro_card": { "enabled": true, "duration": 2.5, "default_text": "How to…", "background": "brand.primary" },
+      "outro_card": { "enabled": true, "default_text": "Questions? Visit yourbrand.com/help", "duration": 3.0, "background": "brand.primary" },
+      "music": { "default_mood": "focus", "volume": 0.1, "ducking": true, "fade_in": 1.0, "fade_out": 1.5, "leads": false },
+      "panel": ["moments", "format", "captions", "text", "branding", "music", "export"]
+    },
+    {
+      "id": "announcement-teaser",
+      "version": 1,
+      "name": "Announcement Teaser",
+      "audience": ["marketers", "creators"],
+      "category": "brand",
+      "description": "Short teaser: bold kinetic text cards between one to three moments, ending on a call to action.",
+      "formats": ["9:16", "1:1"],
+      "default_format": "9:16",
+      "moments": { "min": 1, "max": 3, "max_total_seconds": 30, "max_moment_seconds": 8 },
+      "layout": { "type": "fill", "reframe": "subject" },
+      "captions": { "enabled": false, "style": "bold-pop", "position": "lower-middle" },
+      "text_layers": [
+        {
+          "id": "card",
+          "role": "title",
+          "default_text": "Something new is coming",
+          "timing": { "between_moments": true, "duration": 1.6 },
+          "style": { "font": "Bebas Neue", "size": "xxl", "position": "center", "background": "brand.primary", "animation": "slam" }
+        },
+        {
+          "id": "cta",
+          "role": "cta",
+          "default_text": "Launching 12 October · yourbrand.com",
+          "timing": { "from": "outro" },
+          "style": { "font": "Montserrat ExtraBold", "size": "large", "position": "center" }
+        }
+      ],
+      "branding": { "logo": { "position": "center-bottom", "opacity": 1.0, "default_enabled": true } },
+      "transitions": { "type": "cut" },
+      "intro_card": null,
+      "outro_card": { "enabled": true, "duration": 3.0, "background": "brand.primary" },
+      "music": { "default_mood": "dramatic", "volume": 0.9, "ducking": false, "fade_in": 0.2, "fade_out": 1.0, "leads": true, "original_audio_volume": 0.15 },
+      "panel": ["moments", "format", "text", "branding", "music", "export"]
+    }
+  ]
+}

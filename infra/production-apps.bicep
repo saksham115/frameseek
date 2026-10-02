@@ -32,6 +32,8 @@ var apiImage = '${acrLoginServer}/frameseek-api:${imageTag}'
 var commonEnv = [
   { name: 'DEBUG', value: 'false' }
   { name: 'PAYMENTS_ENABLED', value: 'false' }
+  // Template plan limits; switch on together with payments.
+  { name: 'TEMPLATE_LIMITS_ENFORCED', value: 'false' }
   { name: 'DATABASE_SSL', value: 'true' }
   { name: 'COOKIE_SECURE', value: 'true' }
   { name: 'AZURE_CLIENT_ID', value: identityClientId }

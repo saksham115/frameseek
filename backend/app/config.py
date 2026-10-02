@@ -92,6 +92,9 @@ class Settings(BaseSettings):
 
     # ---- Billing (Stripe, replaces Apple/Google IAP) ----
     PAYMENTS_ENABLED: bool = False
+    # Per-plan template limits (renders a month, length, resolution, watermark). Off until
+    # payments are on: meanwhile every account gets Pro template limits, no watermark.
+    TEMPLATE_LIMITS_ENFORCED: bool = False
     STRIPE_SECRET_KEY: str = ""
     STRIPE_WEBHOOK_SECRET: str = ""
     STRIPE_PRICE_PRO_MONTHLY: str = ""

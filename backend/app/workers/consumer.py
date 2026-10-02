@@ -30,6 +30,10 @@ async def _handle(body: dict) -> None:
     mtype = body.get("type")
     if mtype == "process_video":
         await video_processor.process_video(body["job_id"])
+    elif mtype == "render_creation":
+        from app.workers import render_worker
+
+        await render_worker.render_creation(body["render_id"])
     elif mtype == "transcribe_video":
         await video_processor.transcribe_video_standalone(body["video_id"])
     else:
