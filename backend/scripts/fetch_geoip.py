@@ -13,7 +13,9 @@ months = [today.strftime("%Y-%m"), (today.replace(day=1) - datetime.timedelta(da
 for month in months:
     url = f"https://download.db-ip.com/free/dbip-country-lite-{month}.mmdb.gz"
     try:
-        data = urllib.request.urlopen(url, timeout=60).read()
+        # DB-IP refuses Python's default User-Agent (403), so name ourselves.
+        request = urllib.request.Request(url, headers={"User-Agent": "FrameSeek/1.0 (+https://app.frameseek.in)"})
+        data = urllib.request.urlopen(request, timeout=60).read()
         with open(target, "wb") as fh:
             fh.write(gzip.decompress(data))
         print(f"GeoIP database {month} saved to {target}")
