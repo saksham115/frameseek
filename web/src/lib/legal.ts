@@ -8,7 +8,7 @@ export interface LegalDocument {
   sections: { heading: string; body: string[] }[];
 }
 
-export const LEGAL_EFFECTIVE_DATE = "September 26, 2026";
+export const LEGAL_EFFECTIVE_DATE = "October 3, 2026";
 export const PRIVACY_CONTACT = "privacy@frameseek.com";
 
 export const TERMS_OF_SERVICE: LegalDocument = {
@@ -90,8 +90,8 @@ export const PRIVACY_POLICY: LegalDocument = {
       heading: "1. What we collect",
       body: [
         "Account: your name, email address and Google account identifier from Google sign-in.",
-        "Content: the videos you upload and what we derive from them: sampled frames and thumbnails, image embeddings (numeric fingerprints used for search), audio transcripts, and the clips you export.",
-        "Activity: your searches and search history, folders, sign-in times, and basic usage needed to enforce plan limits.",
+        "Content: the videos you upload and what we derive from them: sampled frames and thumbnails, image embeddings (numeric fingerprints used for search), audio transcripts, and the clips you export. If you make creations, we store their settings, the logos and music you upload for them, and the videos we render.",
+        "Activity: your searches and search history, folders, sign-in times, the days you use FrameSeek, and basic usage needed to enforce plan limits. We also record your approximate country, worked out from your IP address when you open the app (we don’t store the IP address), and your browser’s time zone. We use these for aggregate usage statistics.",
         "Feedback: messages you send through the in-app feedback box, with the page you were on and your browser type.",
         "Billing: if you subscribe, Stripe processes your payment details. We store your Stripe customer ID and subscription status, never your card number.",
       ],

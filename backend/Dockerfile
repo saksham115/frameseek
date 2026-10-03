@@ -18,6 +18,11 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# IP-to-country database (DB-IP Lite, CC BY 4.0) for the admin dashboard's geography.
+# Best effort: without it, countries show as unknown.
+COPY scripts/fetch_geoip.py /tmp/fetch_geoip.py
+RUN mkdir -p /app/geoip && (python /tmp/fetch_geoip.py /app/geoip/dbip-country-lite.mmdb || true)
+
 COPY app ./app
 # Register the bundled OFL fonts with fontconfig so libass can also use them as fallbacks
 # (for example Devanagari glyphs inside a Latin caption font).

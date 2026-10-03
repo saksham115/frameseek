@@ -42,6 +42,13 @@ async def get_current_user(
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
 
+    from app.services.activity import touch
+
+    try:
+        await touch(db, user)
+    except Exception:  # activity is best effort; never block a request on it
+        await db.rollback()
+
     return user
 
 
@@ -61,4 +68,16 @@ async def get_active_user(user: User = Depends(get_current_user)) -> User:
             detail="Accept the Terms of Service and Privacy Policy to continue.",
             headers={TOS_REQUIRED_HEADER: "tos"},
         )
+    return user
+
+
+async def get_admin_user(
+    user: User = Depends(get_active_user),
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    """An admin: listed in ADMIN_EMAILS or added from the admin dashboard."""
+    from app.services.admin_access import is_admin
+
+    if not await is_admin(db, user):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     return user

@@ -8,6 +8,14 @@ export const api = axios.create({
   withCredentials: true,
 });
 
+// The browser's timezone lets the admin dashboard show where people use FrameSeek.
+try {
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  if (tz) api.defaults.headers.common["X-Timezone"] = tz;
+} catch {
+  /* older browsers: timezone is optional */
+}
+
 // Single-flight refresh: many requests can 401 at once, but only one /auth/refresh runs.
 // This fixes the refresh race that could force-log-out users in the old client.
 let refreshInFlight: Promise<void> | null = null;

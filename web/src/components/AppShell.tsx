@@ -5,6 +5,7 @@ import {
   ArrowUpRight,
   ChevronRight,
   Clapperboard,
+  ShieldCheck,
   Film,
   FolderOpen,
   HardDrive,
@@ -55,6 +56,7 @@ export default function AppShell() {
         "/settings": "Settings",
         "/upgrade": "Plans",
         "/creations": "Creations",
+        "/admin": "Admin",
       }[location.pathname] ?? "Workspace");
   const uploads = useUploads((s) => s.items);
   const { data: creations } = useQuery({ queryKey: ["creations"], queryFn: listCreations, staleTime: 60_000 });
@@ -286,6 +288,15 @@ export default function AppShell() {
             <Settings2 size={17} strokeWidth={1.7} />
             <span>Settings</span>
           </NavLink>
+          {user?.is_admin && (
+            <NavLink
+              to="/admin"
+              className={({ isActive }) => cn("studio-nav", isActive && "active")}
+            >
+              <ShieldCheck size={17} strokeWidth={1.7} />
+              <span>Admin</span>
+            </NavLink>
+          )}
           <div className="sidebar-account">
             <NavLink to="/settings" className="account-link">
               <div className="avatar-tile">{initials}</div>

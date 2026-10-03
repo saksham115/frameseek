@@ -52,6 +52,12 @@ class User(Base):
     # First-visit product tour: set when the user finishes or skips it.
     tour_completed_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
 
+    # Where and when the user is active (for the admin dashboard). Country comes from the
+    # sign-in IP (the IP itself is not stored); timezone from the browser.
+    country_code: Mapped[str | None] = mapped_column(String(2), index=True)
+    timezone: Mapped[str | None] = mapped_column(String(64))
+    last_seen_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), index=True)
+
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())

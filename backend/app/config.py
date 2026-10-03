@@ -102,6 +102,13 @@ class Settings(BaseSettings):
     STRIPE_PRICE_PRO_MAX_MONTHLY: str = ""
     STRIPE_PRICE_PRO_MAX_ANNUAL: str = ""
 
+    # ---- Admin ----
+    # Comma-separated Google account emails that are always admins (set in Azure). Admins
+    # can add and remove further admins from the dashboard; these can't be removed there.
+    ADMIN_EMAILS: str = ""
+    # IP-to-country database (DB-IP Lite, CC BY 4.0), downloaded into the image at build.
+    GEOIP_DB_PATH: str = "/app/geoip/dbip-country-lite.mmdb"
+
     # ---- App ----
     FRONTEND_URL: str = "http://localhost:8080"
     CORS_ORIGINS: str = "http://localhost:8080"  # comma-separated
@@ -120,6 +127,10 @@ class Settings(BaseSettings):
         import ssl
 
         return {"ssl": ssl.create_default_context()}
+
+    @property
+    def admin_emails(self) -> set[str]:
+        return {e.strip().lower() for e in self.ADMIN_EMAILS.split(",") if e.strip()}
 
     @property
     def cors_origins_list(self) -> list[str]:

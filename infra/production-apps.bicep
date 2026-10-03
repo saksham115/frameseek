@@ -17,6 +17,8 @@ param visionEndpoint string
 param openAiEndpoint string
 param whisperDeployment string = 'whisper'
 param deployServices bool = true
+@description('Comma-separated Google account emails that are always admins of the admin dashboard.')
+param adminEmails string = ''
 @description('Public hostname users reach the app on (custom domain bound to frameseek-web).')
 param publicHostname string = 'app.frameseek.in'
 @description('Name of the managed certificate for publicHostname in the Container Apps environment. It is issued once by `az containerapp hostname bind` (the DNS records must exist first).')
@@ -34,6 +36,7 @@ var commonEnv = [
   { name: 'PAYMENTS_ENABLED', value: 'false' }
   // Template plan limits; switch on together with payments.
   { name: 'TEMPLATE_LIMITS_ENFORCED', value: 'false' }
+  { name: 'ADMIN_EMAILS', value: adminEmails }
   { name: 'DATABASE_SSL', value: 'true' }
   { name: 'COOKIE_SECURE', value: 'true' }
   { name: 'AZURE_CLIENT_ID', value: identityClientId }

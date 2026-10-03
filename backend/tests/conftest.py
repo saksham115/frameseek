@@ -52,7 +52,7 @@ async def db_session():
         await conn.execute(
             text(
                 "TRUNCATE TABLE "
-                "search_quota_requests, user_feedback, search_history, user_analytics, frames, jobs, videos, folders, users "
+                "admins, search_quota_requests, user_feedback, search_history, user_analytics, frames, jobs, videos, folders, users "
                 "CASCADE"
             )
         )

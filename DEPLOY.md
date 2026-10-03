@@ -209,6 +209,12 @@ and is not packaged in either Docker image.
 
 `production-apps.bicep` holds nonsecret environment settings: endpoints, Google
 client ID, callback URL, `DATABASE_SSL=true`, secure cookies and payments disabled.
+
+Admin dashboard (`/admin`): `ADMIN_EMAILS` (the `adminEmails` parameter) lists the
+Google accounts that are always admins; they can add and remove further admins in the
+dashboard. To change it without a full infra deploy:
+`az containerapp update -n frameseek-api -g frameseek-prod --set-env-vars "ADMIN_EMAILS=a@gmail.com,b@gmail.com"`.
+Country stats use the DB-IP Lite database, downloaded into the API image at build.
 Blob CORS permits only the production web origin. The web nginx proxy forwards
 `/api/` to the private API, so browser cookies stay on one HTTPS origin.
 

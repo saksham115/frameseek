@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useImportDialog } from "@/store/importDialog";
 import { useAuth } from "@/store/auth";
@@ -17,6 +17,9 @@ import NotFound from "@/pages/NotFound";
 import Legal from "@/pages/Legal";
 import TermsGate from "@/components/TermsGate";
 import { rememberReturnPath, takeReturnPath } from "@/lib/navigation";
+
+// Only admins load the dashboard (and its charting and map code).
+const Admin = lazy(() => import("@/pages/Admin"));
 
 /** Old /upload links: show the library with the Import dialog open. */
 function OpenImportDialog() {
@@ -98,6 +101,18 @@ const App = () => {
         <Route path="/videos/:id" element={<VideoDetail />} />
         <Route path="/create/:id" element={<CreationEditor />} />
         <Route path="/creations" element={<Creations />} />
+        <Route
+          path="/admin"
+          element={
+            user?.is_admin ? (
+              <Suspense fallback={<div className="min-h-[50vh]" />}>
+                <Admin />
+              </Suspense>
+            ) : (
+              <NotFound />
+            )
+          }
+        />
         <Route path="/settings" element={<Settings />} />
         <Route path="/upgrade" element={<Paywall />} />
         <Route path="/login" element={<Navigate to="/" replace />} />

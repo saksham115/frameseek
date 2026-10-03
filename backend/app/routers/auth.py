@@ -97,9 +97,26 @@ async def logout(request: Request, response: Response, db: AsyncSession = Depend
     return ApiResponse(data={"success": True})
 
 
+async def _user_response(db: AsyncSession, user: User) -> UserResponse:
+    from app.services.admin_access import is_admin
+
+    resp = UserResponse.model_validate(user)
+    resp.is_admin = await is_admin(db, user)
+    return resp
+
+
 @router.get("/me", response_model=ApiResponse[UserResponse])
-async def get_me(current_user: User = Depends(get_current_user)):
-    return ApiResponse(data=UserResponse.model_validate(current_user))
+async def get_me(request: Request, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    # The app loads this on every visit: note where the user is (country only, from the IP).
+    from app.services.geo import clean_timezone, client_ip, country_for_ip
+
+    country = country_for_ip(client_ip(request))
+    tz = clean_timezone(request.headers.get("x-timezone"))
+    if (country and country != current_user.country_code) or (tz and tz != current_user.timezone):
+        current_user.country_code = country or current_user.country_code
+        current_user.timezone = tz or current_user.timezone
+        await db.commit()
+    return ApiResponse(data=await _user_response(db, current_user))
 
 
 @router.post("/accept-tos", response_model=ApiResponse[UserResponse])
@@ -111,6 +128,9 @@ async def accept_tos(
     if not data.accepted:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Terms must be accepted")
     result = await AuthService(db).accept_tos(current_user.user_id)
+    from app.services.admin_access import is_admin
+
+    result.is_admin = await is_admin(db, current_user)
     return ApiResponse(data=result)
 
 
@@ -123,7 +143,7 @@ async def complete_tour(
     if current_user.tour_completed_at is None:
         current_user.tour_completed_at = datetime.now(timezone.utc)
         await db.flush()
-    return ApiResponse(data=UserResponse.model_validate(current_user))
+    return ApiResponse(data=await _user_response(db, current_user))
 
 
 @router.delete("/me")
