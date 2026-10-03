@@ -14,7 +14,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { ChevronLeft, ChevronRight, Loader2, RefreshCw, Search, ShieldCheck, Trash2, UserPlus } from "lucide-react";
+import { CalendarRange, ChevronLeft, ChevronRight, Loader2, RefreshCw, Search, ShieldCheck, Trash2, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import {
   addAdmin,
@@ -25,7 +25,9 @@ import {
   removeAdmin,
   type AdminEntry,
   type AdminOverview,
+  type OverviewRange,
 } from "@/api/admin";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { PageHeader } from "@/components/MediaUI";
 import { Button } from "@/components/ui/button";
 import {
@@ -56,6 +58,10 @@ const RANGES = [7, 30, 90] as const;
 
 const num = (n: number | null | undefined) => (n ?? 0).toLocaleString("en-IN");
 const pct = (n: number | null | undefined) => (n == null ? "–" : `${Math.round(n * 100)}%`);
+const isoDay = (d: Date) => d.toISOString().slice(0, 10);
+const shortDate = (d: string) =>
+  new Date(`${d}T00:00:00Z`).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const dayLabel = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString(undefined, { day: "numeric", month: "short", timeZone: "UTC" });
 const ago = (d: string | null) => (d ? formatDistanceToNow(new Date(d), { addSuffix: true }) : "Never");
 
@@ -119,7 +125,11 @@ const chartTip = {
 export default function Admin() {
   const [params, setParams] = useSearchParams();
   const tab: Tab = TABS.some((t) => t.id === params.get("tab")) ? (params.get("tab") as Tab) : "overview";
+  const from = params.get("from") ?? "";
+  const to = params.get("to") ?? "";
+  const custom = DATE_RE.test(from) && DATE_RE.test(to);
   const days = RANGES.includes(Number(params.get("days")) as 7) ? Number(params.get("days")) : 30;
+  const range: OverviewRange = custom ? { from, to } : { days };
   const set = (next: Record<string, string>) =>
     setParams((prev) => {
       const p = new URLSearchParams(prev);
@@ -128,8 +138,8 @@ export default function Admin() {
     }, { replace: true });
 
   const overview = useQuery({
-    queryKey: ["admin", "overview", days],
-    queryFn: () => getOverview(days),
+    queryKey: ["admin", "overview", range],
+    queryFn: () => getOverview(range),
     placeholderData: keepPreviousData,
     refetchInterval: 60_000,
   });
@@ -148,11 +158,17 @@ export default function Admin() {
           <div className="admin-actions">
             <div className="view-toggle" aria-label="Date range">
               {RANGES.map((r) => (
-                <button key={r} className={cn("admin-range", days === r && "active")} aria-pressed={days === r}
-                  onClick={() => set({ days: r === 30 ? "" : String(r) })}>
+                <button key={r} className={cn("admin-range", !custom && days === r && "active")} aria-pressed={!custom && days === r}
+                  onClick={() => set({ days: r === 30 ? "" : String(r), from: "", to: "" })}>
                   {r} days
                 </button>
               ))}
+              <CustomRange
+                active={custom}
+                from={from}
+                to={to}
+                onApply={(f, t) => set({ from: f, to: t, days: "" })}
+              />
             </div>
             <Button variant="outline" className="studio-button" onClick={() => overview.refetch()} disabled={overview.isFetching}>
               <RefreshCw className={cn(overview.isFetching && "animate-spin")} /> Refresh
@@ -179,7 +195,7 @@ export default function Admin() {
         ) : !overview.data ? (
           <div className="admin-loading"><Loader2 className="animate-spin" size={18} /></div>
         ) : (
-          <Overview data={overview.data} />
+          <Overview data={overview.data} custom={custom} />
         ))}
       {tab === "users" && <UsersTab />}
       {tab === "feedback" && <FeedbackTab />}
@@ -188,9 +204,82 @@ export default function Admin() {
   );
 }
 
+// ------------------------------------------------------------------ custom range
+
+function CustomRange({ active, from, to, onApply }: { active: boolean; from: string; to: string; onApply: (f: string, t: string) => void }) {
+  const today = isoDay(new Date());
+  const [open, setOpen] = useState(false);
+  const [start, setStart] = useState(from || isoDay(new Date(Date.now() - 29 * 86_400_000)));
+  const [end, setEnd] = useState(to || today);
+  useEffect(() => {
+    if (open) {
+      setStart(from || isoDay(new Date(Date.now() - 29 * 86_400_000)));
+      setEnd(to || today);
+    }
+  }, [open]);
+  const span = start && end ? Math.round((Date.parse(end) - Date.parse(start)) / 86_400_000) + 1 : 0;
+  const error = !start || !end
+    ? "Choose both dates."
+    : start > end
+      ? "The start date must be on or before the end date."
+      : span > 366
+        ? "Choose a range of up to 366 days."
+        : null;
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button className={cn("admin-range admin-range-custom", active && "active")} aria-pressed={active}>
+          <CalendarRange size={12} />
+          {active ? `${shortDate(from)} to ${shortDate(to)}` : "Custom"}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="admin-range-pop">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (error) return;
+            onApply(start, end);
+            setOpen(false);
+          }}
+        >
+          <div className="admin-range-fields">
+            <label>
+              <span>From</span>
+              <input id="admin-range-from" type="date" value={start} max={end || today} onChange={(e) => setStart(e.target.value)} />
+            </label>
+            <label>
+              <span>To</span>
+              <input id="admin-range-to" type="date" value={end} min={start} max={today} onChange={(e) => setEnd(e.target.value)} />
+            </label>
+          </div>
+          <div className="admin-range-quick">
+            {[
+              ["This month", isoDay(new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1))), today],
+              ["Last month",
+                isoDay(new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() - 1, 1))),
+                isoDay(new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 0)))],
+              ["This year", `${new Date().getUTCFullYear()}-01-01`, today],
+            ].map(([label, f, t]) => (
+              <button key={label} type="button" onClick={() => { setStart(f); setEnd(t); }}>
+                {label}
+              </button>
+            ))}
+          </div>
+          <p className={cn("admin-range-hint", error && "is-error")}>
+            {error ?? `${span} ${span === 1 ? "day" : "days"} · dates in UTC`}
+          </p>
+          <Button className="studio-button w-full" type="submit" disabled={!!error}>
+            Apply range
+          </Button>
+        </form>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 // ------------------------------------------------------------------ overview
 
-function Overview({ data }: { data: AdminOverview }) {
+function Overview({ data, custom }: { data: AdminOverview; custom: boolean }) {
   const { users, content, searches, creations, renders } = data;
   const daily = data.daily.map((d) => ({ ...d, label: dayLabel(d.day) }));
   const counts = useMemo(() => Object.fromEntries(data.countries.map((c) => [c.code, c.users])), [data.countries]);
@@ -201,7 +290,8 @@ function Overview({ data }: { data: AdminOverview }) {
   }, [data.countries]);
   const known = users.total - users.unknown_country;
   const storagePct = content.storage_limit_bytes ? content.storage_bytes / content.storage_limit_bytes : 0;
-  const range = `${data.days} days`;
+  const range = custom ? "this period" : `${data.days} days`;
+  const period = custom ? `${shortDate(data.start)} to ${shortDate(data.end)}` : `last ${data.days} days`;
 
   return (
     <div className="admin-overview">
@@ -222,7 +312,7 @@ function Overview({ data }: { data: AdminOverview }) {
       </div>
 
       <div className="admin-grid two">
-        <Panel title="Signups and active users" note={`Daily, last ${range}`}>
+        <Panel title="Signups and active users" note={`Daily, ${period}`}>
           <div className="admin-chart">
             <ResponsiveContainer width="100%" height={240}>
               <ComposedChart data={daily} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
@@ -237,7 +327,7 @@ function Overview({ data }: { data: AdminOverview }) {
             </ResponsiveContainer>
           </div>
         </Panel>
-        <Panel title="Activity" note={`Daily, last ${range}`}>
+        <Panel title="Activity" note={`Daily, ${period}`}>
           <div className="admin-chart">
             <ResponsiveContainer width="100%" height={240}>
               <ComposedChart data={daily} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>

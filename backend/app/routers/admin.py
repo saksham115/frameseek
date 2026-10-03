@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import logging
 import re
+from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -29,13 +30,34 @@ class AddAdminRequest(BaseModel):
     email: str = Field(min_length=3, max_length=255)
 
 
+MAX_RANGE_DAYS = 366
+
+
 @router.get("/overview")
 async def overview(
-    days: int = Query(30, ge=7, le=365),
+    days: int = Query(30, ge=1, le=MAX_RANGE_DAYS),
+    start: date | None = Query(None, alias="from"),
+    end: date | None = Query(None, alias="to"),
     admin: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db),
 ):
-    return ApiResponse(data=await admin_stats.overview(db, days))
+    """Either the last `days` days (ending today), or a custom range `from`..`to` (UTC
+    dates, inclusive)."""
+    today = datetime.now(timezone.utc).date()
+    if start or end:
+        if not (start and end):
+            raise HTTPException(status_code=400, detail="Choose both a start and an end date.")
+        if start > end:
+            raise HTTPException(status_code=400, detail="The start date must be on or before the end date.")
+        if end > today:
+            end = today
+        if start > today:
+            raise HTTPException(status_code=400, detail="The range can’t start in the future.")
+        if (end - start).days + 1 > MAX_RANGE_DAYS:
+            raise HTTPException(status_code=400, detail=f"Choose a range of up to {MAX_RANGE_DAYS} days.")
+    else:
+        start, end = today - timedelta(days=days - 1), today
+    return ApiResponse(data=await admin_stats.overview(db, start, end))
 
 
 @router.get("/users")

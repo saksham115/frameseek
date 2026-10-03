@@ -6,7 +6,7 @@ no activity show as zero instead of disappearing.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 
 from sqlalchemy import text
@@ -30,18 +30,22 @@ async def _all(db: AsyncSession, sql: str, **params) -> list[dict]:
     return [_plain(r) for r in (await db.execute(text(sql), params)).mappings().all()]
 
 
-def _days(days_back: int) -> str:
-    return f"generate_series((now() AT TIME ZONE 'UTC')::date - {int(days_back) - 1}, (now() AT TIME ZONE 'UTC')::date, interval '1 day')"
+def _days(start: date, end: date) -> str:
+    # Typed dates, formatted by us: safe to inline.
+    return f"generate_series(DATE '{start.isoformat()}', DATE '{end.isoformat()}', interval '1 day')"
 
 
-async def overview(db: AsyncSession, days: int) -> dict:
-    since = datetime.now(timezone.utc) - timedelta(days=days)
-    p = {"since": since}
+async def overview(db: AsyncSession, start: date, end: date) -> dict:
+    """Stats for UTC days start..end inclusive. "Active today/this week/this month" and
+    totals are always as of now; everything labelled in-range follows the dates."""
+    since = datetime.combine(start, time.min, tzinfo=timezone.utc)
+    until = datetime.combine(end + timedelta(days=1), time.min, tzinfo=timezone.utc)
+    p = {"since": since, "until": until}
 
     users = await _one(db, """
         SELECT
           count(*) FILTER (WHERE deleted_at IS NULL) AS total,
-          count(*) FILTER (WHERE deleted_at IS NULL AND created_at >= :since) AS new_in_range,
+          count(*) FILTER (WHERE deleted_at IS NULL AND created_at >= :since AND created_at < :until) AS new_in_range,
           count(*) FILTER (WHERE deleted_at IS NULL AND created_at >= now() - interval '7 days') AS new_7d,
           count(*) FILTER (WHERE deleted_at IS NULL AND last_seen_at >= now() - interval '1 day') AS active_1d,
           count(*) FILTER (WHERE deleted_at IS NULL AND last_seen_at >= now() - interval '7 days') AS active_7d,
@@ -63,7 +67,7 @@ async def overview(db: AsyncSession, days: int) -> dict:
         SELECT d::date AS day,
           (SELECT count(*) FROM users u WHERE (u.created_at AT TIME ZONE 'UTC')::date = d::date) AS signups,
           (SELECT count(*) FROM user_active_days a WHERE a.day = d::date) AS active
-        FROM {_days(days)} d ORDER BY d
+        FROM {_days(start, end)} d ORDER BY d
     """)
 
     plans = await _all(db, """
@@ -73,7 +77,7 @@ async def overview(db: AsyncSession, days: int) -> dict:
     countries = await _all(db, """
         SELECT country_code AS code, count(*) AS users,
           count(*) FILTER (WHERE last_seen_at >= now() - interval '30 days') AS active_30d,
-          count(*) FILTER (WHERE created_at >= :since) AS new_in_range
+          count(*) FILTER (WHERE created_at >= :since AND created_at < :until) AS new_in_range
         FROM users WHERE deleted_at IS NULL AND country_code IS NOT NULL
         GROUP BY country_code ORDER BY users DESC
     """, **p)
@@ -89,14 +93,14 @@ async def overview(db: AsyncSession, days: int) -> dict:
           count(*) FILTER (WHERE status = 'ready') AS ready,
           count(*) FILTER (WHERE status IN ('queued', 'processing', 'uploaded')) AS in_progress,
           count(*) FILTER (WHERE status = 'error') AS failed,
-          count(*) FILTER (WHERE status = 'error' AND created_at >= :since) AS failed_in_range,
-          count(*) FILTER (WHERE created_at >= :since) AS uploaded_in_range,
+          count(*) FILTER (WHERE status = 'error' AND created_at >= :since AND created_at < :until) AS failed_in_range,
+          count(*) FILTER (WHERE created_at >= :since AND created_at < :until) AS uploaded_in_range,
           coalesce(sum(duration_seconds) FILTER (WHERE status = 'ready'), 0) / 3600.0 AS hours,
           coalesce(avg(duration_seconds) FILTER (WHERE status = 'ready'), 0) / 60.0 AS avg_minutes,
           count(*) FILTER (WHERE has_transcript) AS transcribed,
           coalesce(sum(frame_count), 0) AS frames,
           coalesce(avg(EXTRACT(EPOCH FROM (processed_at - created_at)))
-            FILTER (WHERE status = 'ready' AND processed_at IS NOT NULL AND created_at >= :since), 0) / 60.0
+            FILTER (WHERE status = 'ready' AND processed_at IS NOT NULL AND created_at >= :since AND created_at < :until), 0) / 60.0
             AS avg_processing_minutes
         FROM videos WHERE deleted_at IS NULL
     """, **p)
@@ -111,32 +115,32 @@ async def overview(db: AsyncSession, days: int) -> dict:
           (SELECT count(*) FROM videos v WHERE (v.created_at AT TIME ZONE 'UTC')::date = d::date) AS videos,
           (SELECT coalesce(sum(v.duration_seconds), 0) / 3600.0 FROM videos v
              WHERE (v.created_at AT TIME ZONE 'UTC')::date = d::date) AS hours
-        FROM {_days(days)} d ORDER BY d
+        FROM {_days(start, end)} d ORDER BY d
     """)
 
     searches = await _one(db, """
         SELECT
           count(*) AS total,
-          count(*) FILTER (WHERE created_at >= :since) AS in_range,
-          count(DISTINCT user_id) FILTER (WHERE created_at >= :since) AS searchers_in_range,
-          coalesce(avg(search_time_ms) FILTER (WHERE created_at >= :since), 0) AS avg_ms,
-          coalesce(avg(CASE WHEN results_count = 0 THEN 1.0 ELSE 0.0 END) FILTER (WHERE created_at >= :since), 0)
+          count(*) FILTER (WHERE created_at >= :since AND created_at < :until) AS in_range,
+          count(DISTINCT user_id) FILTER (WHERE created_at >= :since AND created_at < :until) AS searchers_in_range,
+          coalesce(avg(search_time_ms) FILTER (WHERE created_at >= :since AND created_at < :until), 0) AS avg_ms,
+          coalesce(avg(CASE WHEN results_count = 0 THEN 1.0 ELSE 0.0 END) FILTER (WHERE created_at >= :since AND created_at < :until), 0)
             AS zero_result_rate
         FROM search_history
     """, **p)
     searches["quota_requests_in_range"] = (await _one(db, """
-        SELECT count(*) AS n FROM search_quota_requests WHERE created_at >= :since
+        SELECT count(*) AS n FROM search_quota_requests WHERE created_at >= :since AND created_at < :until
     """, **p)).get("n", 0)
     searches_daily = await _all(db, f"""
         SELECT d::date AS day,
           (SELECT count(*) FROM search_history s WHERE (s.created_at AT TIME ZONE 'UTC')::date = d::date) AS searches
-        FROM {_days(days)} d ORDER BY d
+        FROM {_days(start, end)} d ORDER BY d
     """)
 
     creations = await _one(db, """
         SELECT
           count(*) AS total,
-          count(*) FILTER (WHERE created_at >= :since) AS in_range,
+          count(*) FILTER (WHERE created_at >= :since AND created_at < :until) AS in_range,
           count(*) FILTER (WHERE NOT EXISTS (
             SELECT 1 FROM renders r WHERE r.creation_id = c.creation_id AND r.status = 'ready')) AS drafts
         FROM creations c WHERE deleted_at IS NULL
@@ -145,12 +149,12 @@ async def overview(db: AsyncSession, days: int) -> dict:
     renders = await _one(db, """
         SELECT
           count(*) AS total,
-          count(*) FILTER (WHERE created_at >= :since) AS in_range,
-          count(*) FILTER (WHERE status = 'ready' AND created_at >= :since) AS ready_in_range,
-          count(*) FILTER (WHERE status = 'failed' AND created_at >= :since) AS failed_in_range,
+          count(*) FILTER (WHERE created_at >= :since AND created_at < :until) AS in_range,
+          count(*) FILTER (WHERE status = 'ready' AND created_at >= :since AND created_at < :until) AS ready_in_range,
+          count(*) FILTER (WHERE status = 'failed' AND created_at >= :since AND created_at < :until) AS failed_in_range,
           count(*) FILTER (WHERE status IN ('queued', 'rendering')) AS active,
           coalesce(avg(EXTRACT(EPOCH FROM (completed_at - created_at)))
-            FILTER (WHERE status = 'ready' AND created_at >= :since), 0) AS avg_seconds,
+            FILTER (WHERE status = 'ready' AND created_at >= :since AND created_at < :until), 0) AS avg_seconds,
           coalesce(sum(duration_seconds) FILTER (WHERE status = 'ready'), 0) / 60.0 AS minutes_rendered,
           count(*) FILTER (WHERE status = 'ready' AND resolution >= 1080) AS hd
         FROM renders
@@ -161,7 +165,7 @@ async def overview(db: AsyncSession, days: int) -> dict:
         SELECT d::date AS day,
           (SELECT count(*) FROM renders r WHERE (r.created_at AT TIME ZONE 'UTC')::date = d::date AND r.status = 'ready') AS ready,
           (SELECT count(*) FROM renders r WHERE (r.created_at AT TIME ZONE 'UTC')::date = d::date AND r.status = 'failed') AS failed
-        FROM {_days(days)} d ORDER BY d
+        FROM {_days(start, end)} d ORDER BY d
     """)
 
     names = {t["id"]: t["name"] for t in list_templates()}
@@ -186,24 +190,26 @@ async def overview(db: AsyncSession, days: int) -> dict:
     """)
 
     feedback = await _one(db, """
-        SELECT count(*) AS total, count(*) FILTER (WHERE created_at >= :since) AS in_range FROM user_feedback
+        SELECT count(*) AS total, count(*) FILTER (WHERE created_at >= :since AND created_at < :until) AS in_range FROM user_feedback
     """, **p)
     feedback["by_category"] = await _all(db, """
-        SELECT category, count(*) AS n FROM user_feedback WHERE created_at >= :since
+        SELECT category, count(*) AS n FROM user_feedback WHERE created_at >= :since AND created_at < :until
         GROUP BY category ORDER BY n DESC
     """, **p)
     deletions = await _one(db, """
-        SELECT count(*) AS total, count(*) FILTER (WHERE created_at >= :since) AS in_range
+        SELECT count(*) AS total, count(*) FILTER (WHERE created_at >= :since AND created_at < :until) AS in_range
         FROM account_deletion_feedback
     """, **p)
     deletions["reasons"] = await _all(db, """
-        SELECT reason, count(*) AS n FROM account_deletion_feedback WHERE created_at >= :since
+        SELECT reason, count(*) AS n FROM account_deletion_feedback WHERE created_at >= :since AND created_at < :until
         GROUP BY reason ORDER BY n DESC
     """, **p)
 
     return {
         "generated_at": datetime.now(timezone.utc),
-        "days": days,
+        "start": start,
+        "end": end,
+        "days": (end - start).days + 1,
         "geo_enabled": _geo_enabled(),
         "users": users,
         "daily": _merge_daily(signups_daily, uploads_daily, searches_daily, renders_daily),

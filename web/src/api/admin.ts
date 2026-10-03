@@ -13,6 +13,8 @@ export interface DailyRow {
 
 export interface AdminOverview {
   generated_at: string;
+  start: string;
+  end: string;
   days: number;
   geo_enabled: boolean;
   users: {
@@ -109,8 +111,10 @@ export interface FeedbackRow {
   created_at: string;
 }
 
-export async function getOverview(days: number) {
-  const { data } = await api.get<AdminOverview>("/admin/overview", { params: { days } });
+export type OverviewRange = { days: number } | { from: string; to: string };
+
+export async function getOverview(range: OverviewRange) {
+  const { data } = await api.get<AdminOverview>("/admin/overview", { params: range });
   return data;
 }
 

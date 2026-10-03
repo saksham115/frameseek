@@ -16,6 +16,63 @@
   background: hsl(var(--secondary));
   color: hsl(var(--foreground));
 }
+.admin-range-custom {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.admin-range-pop {
+  width: 300px;
+}
+.admin-range-pop form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.admin-range-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.admin-range-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 10px;
+  color: hsl(var(--muted-foreground));
+}
+.admin-range-fields input {
+  font-size: 12px;
+  padding: 6px 8px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 6px;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  color-scheme: inherit;
+  min-width: 0;
+}
+.admin-range-quick {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.admin-range-quick button {
+  font-size: 10px;
+  padding: 4px 9px;
+  border-radius: 99px;
+  border: 1px solid hsl(var(--border));
+}
+.admin-range-quick button:hover {
+  border-color: hsl(var(--primary));
+}
+.admin-range-hint {
+  font-size: 10px;
+  color: hsl(var(--muted-foreground));
+}
+.admin-range-hint.is-error {
+  color: hsl(var(--destructive));
+}
 .admin-loading {
   display: grid;
   place-items: center;

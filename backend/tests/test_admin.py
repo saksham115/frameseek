@@ -99,3 +99,30 @@ def test_client_ip_takes_the_right_most_public_address():
     assert client_ip(SimpleNamespace(headers={}, client=SimpleNamespace(host="127.0.0.1"))) is None
     assert clean_timezone("America/Argentina/Buenos_Aires") == "America/Argentina/Buenos_Aires"
     assert clean_timezone("<script>") is None
+
+
+async def test_overview_custom_range(client, db_session, as_admin, second_user):
+    # Bob joined 40 days ago; Alice today.
+    await db_session.execute(text("UPDATE users SET created_at = now() - interval '40 days' WHERE email = 'bob@test.com'"))
+    await db_session.commit()
+    today = datetime.now(timezone.utc).date()
+    start, end = today - timedelta(days=45), today - timedelta(days=35)
+    url = f"/api/v1/admin/overview?from={start.isoformat()}&to={end.isoformat()}"
+    data = (await client.get(url, headers=as_admin["headers"])).json()["data"]
+    assert data["start"] == start.isoformat() and data["end"] == end.isoformat()
+    assert data["days"] == 11 and len(data["daily"]) == 11
+    assert data["users"]["new_in_range"] == 1  # Bob, not Alice
+    assert sum(d["signups"] for d in data["daily"]) == 1
+
+    bad = [
+        f"from={end.isoformat()}&to={start.isoformat()}",
+        f"from={start.isoformat()}",
+        f"from={(today - timedelta(days=500)).isoformat()}&to={today.isoformat()}",
+        f"from={(today + timedelta(days=2)).isoformat()}&to={(today + timedelta(days=3)).isoformat()}",
+    ]
+    for q in bad:
+        assert (await client.get(f"/api/v1/admin/overview?{q}", headers=as_admin["headers"])).status_code == 400
+    # An end date in the future is clamped to today.
+    future = await client.get(f"/api/v1/admin/overview?from={start.isoformat()}&to={(today + timedelta(days=5)).isoformat()}",
+                              headers=as_admin["headers"])
+    assert future.json()["data"]["end"] == today.isoformat()
