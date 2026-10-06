@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
 from app.config import settings
+from app.middleware import RegionBlockMiddleware
 from app.routers import admin, analytics, auth, clips, creations, feedback, folders, jobs, search, storage, subscriptions, videos
 
 logger = logging.getLogger(__name__)
@@ -42,6 +43,11 @@ app = FastAPI(
     docs_url=None if not settings.DEBUG else "/docs",
     redoc_url=None if not settings.DEBUG else "/redoc",
 )
+
+# Regional availability (India only). Added before CORS on purpose: the middleware added
+# last runs outermost, so CORS wraps this and a refusal still carries the headers the
+# browser needs to let the web app read the 451.
+app.add_middleware(RegionBlockMiddleware)
 
 # Cookie sessions require a concrete origin allowlist (not "*") with credentials enabled.
 app.add_middleware(

@@ -1,8 +1,8 @@
-import { lazy, Suspense, useEffect } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useImportDialog } from "@/store/importDialog";
 import { useAuth } from "@/store/auth";
-import { setAuthFailureHandler, setTermsRequiredHandler } from "@/api/client";
+import { setAuthFailureHandler, setRegionBlockedHandler, setTermsRequiredHandler } from "@/api/client";
 import AppShell from "@/components/AppShell";
 import LogoIcon from "@/components/LogoIcon";
 import Login from "@/pages/Login";
@@ -14,6 +14,7 @@ import Creations from "@/pages/Creations";
 import Settings from "@/pages/Settings";
 import Paywall from "@/pages/Paywall";
 import NotFound from "@/pages/NotFound";
+import Unavailable from "@/pages/Unavailable";
 import Legal from "@/pages/Legal";
 import TermsGate from "@/components/TermsGate";
 import { rememberReturnPath, takeReturnPath } from "@/lib/navigation";
@@ -41,10 +42,13 @@ function RedirectToLogin() {
 const App = () => {
   const { status, user, loadSession, setAnonymous } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const [regionBlocked, setRegionBlocked] = useState(false);
 
   useEffect(() => {
     setAuthFailureHandler(setAnonymous);
     setTermsRequiredHandler(loadSession);
+    setRegionBlockedHandler(() => setRegionBlocked(true));
     loadSession();
   }, [loadSession, setAnonymous]);
 
@@ -53,6 +57,12 @@ const App = () => {
     const path = takeReturnPath();
     if (path) navigate(path, { replace: true });
   }, [status, navigate]);
+
+  // FrameSeek is served in India only. The API refuses everything else, and sends
+  // browser navigations here, so this is checked before anything that needs a session.
+  if (regionBlocked || location.pathname === "/unavailable") {
+    return <Unavailable />;
+  }
 
   if (status === "loading") {
     return (

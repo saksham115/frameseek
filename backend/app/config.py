@@ -109,6 +109,16 @@ class Settings(BaseSettings):
     # IP-to-country database (DB-IP Lite, CC BY 4.0), downloaded into the image at build.
     GEOIP_DB_PATH: str = "/app/geoip/dbip-country-lite.mmdb"
 
+    # ---- Regional availability ----
+    # FrameSeek is offered in India only. With this on, a request from anywhere else is
+    # refused with 451 (app/middleware.py). Off by default so local work and tests are
+    # unaffected; production turns it on (infra/production-apps.bicep).
+    GEO_BLOCKING_ENABLED: bool = False
+    ALLOWED_COUNTRIES: str = "IN"  # comma-separated ISO 3166-1 alpha-2 codes
+    # Addresses and CIDR ranges that skip the country check: the owner travelling, an
+    # office network, an uptime checker. Comma-separated, e.g. "203.0.113.4,198.51.100.0/24".
+    GEO_ALLOWED_IPS: str = ""
+
     # ---- App ----
     FRONTEND_URL: str = "http://localhost:8080"
     CORS_ORIGINS: str = "http://localhost:8080"  # comma-separated
@@ -133,6 +143,10 @@ class Settings(BaseSettings):
         return {e.strip().lower() for e in self.ADMIN_EMAILS.split(",") if e.strip()}
 
     @property
+    def allowed_countries(self) -> set[str]:
+        return {c.strip().upper() for c in self.ALLOWED_COUNTRIES.split(",") if c.strip()}
+
+    @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
 
@@ -149,6 +163,18 @@ class Settings(BaseSettings):
         placeholders = {"", "change-me-in-production", "changeme"}
         if self.JWT_SECRET_KEY in placeholders:
             raise RuntimeError("JWT_SECRET_KEY is unset or a placeholder. Set a real secret (Key Vault: jwt-secret).")
+        if self.GEO_BLOCKING_ENABLED:
+            # Refuse to serve with the gate on but no way to enforce it: a silently
+            # unenforced rule is worse than a failed start, which keeps the last revision up.
+            from pathlib import Path
+
+            if not self.allowed_countries:
+                raise RuntimeError("GEO_BLOCKING_ENABLED is on but ALLOWED_COUNTRIES is empty.")
+            if not Path(self.GEOIP_DB_PATH).exists():
+                raise RuntimeError(
+                    f"GEO_BLOCKING_ENABLED is on but there is no IP country database at {self.GEOIP_DB_PATH}. "
+                    "The image build downloads it (backend/scripts/fetch_geoip.py)."
+                )
         if not self.DEBUG:
             if not self.AZURE_STORAGE_ACCOUNT_URL:
                 raise RuntimeError("AZURE_STORAGE_ACCOUNT_URL must be set in production.")

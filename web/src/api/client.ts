@@ -45,6 +45,13 @@ export function setTermsRequiredHandler(fn: () => void) {
   onTermsRequired = fn;
 }
 
+// Invoked when the API refuses a call because it came from outside the countries
+// FrameSeek is served in, so the app can explain that instead of showing an error.
+let onRegionBlocked: (() => void) | null = null;
+export function setRegionBlockedHandler(fn: () => void) {
+  onRegionBlocked = fn;
+}
+
 api.interceptors.response.use(
   (res) => {
     // The API wraps payloads in { success, data, meta }. Unwrap to the inner data so
@@ -59,6 +66,10 @@ api.interceptors.response.use(
     const original = error.config as (AxiosRequestConfig & { _retried?: boolean }) | undefined;
     const isAuthCall = original?.url?.includes("/auth/refresh") || original?.url?.includes("/auth/login");
 
+    if (error.response?.status === 451) {
+      onRegionBlocked?.();
+      return Promise.reject(error);
+    }
     if (error.response?.status === 403 && error.response.headers["x-requires-acceptance"]) {
       onTermsRequired?.();
     }

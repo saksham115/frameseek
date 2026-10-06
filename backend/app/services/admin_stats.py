@@ -229,9 +229,9 @@ async def overview(db: AsyncSession, start: date, end: date) -> dict:
 
 
 def _geo_enabled() -> bool:
-    from app.services.geo import _reader
+    from app.services.geo import database_available
 
-    return _reader() is not None
+    return database_available()
 
 
 def _merge_daily(*series: list[dict]) -> list[dict]:

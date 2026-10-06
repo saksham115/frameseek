@@ -145,7 +145,15 @@ jobs:
         if: steps.release.outputs.deploy == 'true'
         run: |
           REG="$ACR_NAME.azurecr.io"
-          az containerapp update -n "$API_APP" -g "$RESOURCE_GROUP" --image "$REG/frameseek-api:$GITHUB_SHA" --output none
+          # Regional availability travels with the release so a deploy can't leave the gate
+          # off (infra/production-apps.bicep holds the same values). To change either, set
+          # the repository variable rather than editing this file; GEO_ALLOWED_IPS is left
+          # to the operator, so it is not touched here.
+          az containerapp update -n "$API_APP" -g "$RESOURCE_GROUP" --image "$REG/frameseek-api:$GITHUB_SHA" \
+            --set-env-vars \
+              "GEO_BLOCKING_ENABLED=${{ vars.GEO_BLOCKING_ENABLED || 'true' }}" \
+              "ALLOWED_COUNTRIES=${{ vars.ALLOWED_COUNTRIES || 'IN' }}" \
+            --output none
           az containerapp job update -n "$WORKER_JOB" -g "$RESOURCE_GROUP" --image "$REG/frameseek-api:$GITHUB_SHA" --output none
           az containerapp update -n "$WEB_APP" -g "$RESOURCE_GROUP" --image "$REG/frameseek-web:$GITHUB_SHA" --output none
 

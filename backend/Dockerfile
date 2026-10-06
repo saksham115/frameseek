@@ -18,10 +18,11 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# IP-to-country database (DB-IP Lite, CC BY 4.0) for the admin dashboard's geography.
-# Best effort: without it, countries show as unknown.
+# IP-to-country database (DB-IP Lite, CC BY 4.0): the admin dashboard's geography and
+# the regional availability gate both need it, and the API refuses to start without it,
+# so a build that cannot fetch it fails here rather than shipping an unenforceable image.
 COPY scripts/fetch_geoip.py /tmp/fetch_geoip.py
-RUN mkdir -p /app/geoip && (python /tmp/fetch_geoip.py /app/geoip/dbip-country-lite.mmdb || true)
+RUN mkdir -p /app/geoip && python /tmp/fetch_geoip.py /app/geoip/dbip-country-lite.mmdb
 
 COPY app ./app
 # Register the bundled OFL fonts with fontconfig so libass can also use them as fallbacks
