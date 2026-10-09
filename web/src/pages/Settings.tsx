@@ -3,6 +3,7 @@ import { useTour } from "@/store/tour";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   ArrowUpRight,
+  Clapperboard,
   Compass,
   FileText,
   HardDrive,
@@ -154,6 +155,25 @@ export default function Settings() {
           }}
         >
           Take the tour again
+        </Button>
+      </section>
+      <section className="settings-card flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-3 mb-2">
+            <Clapperboard size={16} className="text-primary" />
+            <h2>Creations walkthrough</h2>
+          </div>
+          <p>How templates, the editor, drafts and rendering fit together.</p>
+        </div>
+        <Button
+          variant="outline"
+          className="studio-button"
+          onClick={() => {
+            navigate("/creations");
+            useTour.getState().start("creations");
+          }}
+        >
+          Show me Creations
         </Button>
       </section>
       <section className="settings-card">

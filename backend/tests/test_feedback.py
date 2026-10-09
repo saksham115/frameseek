@@ -54,6 +54,17 @@ class TestTour:
     async def test_requires_terms_first(self, client, new_user):
         assert (await client.post("/api/v1/auth/tour-complete", headers=new_user["headers"])).status_code == 403
 
+    async def test_creations_tour_is_tracked_separately(self, client, test_user):
+        await client.post("/api/v1/auth/tour-complete", headers=test_user["headers"])
+        me = await client.get("/api/v1/auth/me", headers=test_user["headers"])
+        assert me.json()["data"]["creations_tour_completed_at"] is None
+        first = await client.post("/api/v1/auth/creations-tour-complete", headers=test_user["headers"])
+        assert first.status_code == 200
+        done_at = first.json()["data"]["creations_tour_completed_at"]
+        assert done_at is not None
+        again = await client.post("/api/v1/auth/creations-tour-complete", headers=test_user["headers"])
+        assert again.json()["data"]["creations_tour_completed_at"] == done_at
+
 
 class TestFeedbackAfterAccountDeletion:
     async def test_feedback_is_kept_but_unlinked(self, client, db_session, test_user):

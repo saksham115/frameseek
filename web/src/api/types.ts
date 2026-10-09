@@ -9,6 +9,8 @@ export interface User {
   tos_accepted_at: string | null;
   /** When the first-visit product tour was finished or skipped; null until then. */
   tour_completed_at: string | null;
+  /** When the Creations walkthrough was finished or skipped; null until then. */
+  creations_tour_completed_at: string | null;
   /** Can open the admin dashboard. */
   is_admin: boolean;
 }
@@ -75,6 +77,7 @@ interface RawUser {
   storage_limit_bytes: number;
   tos_accepted_at?: string | null;
   tour_completed_at?: string | null;
+  creations_tour_completed_at?: string | null;
   is_admin?: boolean;
 }
 
@@ -88,6 +91,7 @@ export function mapUser(u: RawUser): User {
     storage_limit_bytes: u.storage_limit_bytes,
     tos_accepted_at: u.tos_accepted_at ?? null,
     tour_completed_at: u.tour_completed_at ?? null,
+    creations_tour_completed_at: u.creations_tour_completed_at ?? null,
     is_admin: u.is_admin === true,
   };
 }

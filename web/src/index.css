@@ -240,6 +240,19 @@
 .studio-nav.active .nav-new {
   display: none;
 }
+.nav-beta {
+  margin-left: auto;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font: 600 8px/13px "JetBrains Mono", monospace;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: hsl(var(--primary) / 0.12);
+  color: hsl(var(--primary));
+}
+.nav-beta + .nav-count {
+  margin-left: 6px;
+}
 .sidebar-note {
   padding: 37px 13px 25px;
   color: hsl(var(--muted-foreground));
@@ -3274,6 +3287,47 @@ kbd {
   justify-content: center;
   gap: 6px;
   color: hsl(var(--primary));
+}
+.tour-visual-welcome .nav-beta {
+  margin-left: 2px;
+}
+.tour-visual-editor {
+  display: flex;
+  gap: 8px;
+  padding: 12px 14px;
+}
+.tour-editor-preview {
+  flex: 1.4;
+  display: grid;
+  place-items: center;
+  border-radius: 4px;
+  background: hsl(var(--secondary));
+}
+.tour-editor-preview span {
+  width: 24px;
+  height: 42px;
+  border-radius: 3px;
+  background: hsl(var(--primary) / 0.22);
+  box-shadow: 0 0 0 1.5px hsl(var(--primary));
+}
+.tour-editor-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+}
+.tour-editor-panel span {
+  height: 8px;
+  border-radius: 99px;
+  background: hsl(var(--secondary));
+}
+.tour-editor-panel span:nth-child(2) {
+  width: 70%;
+  background: hsl(var(--primary) / 0.35);
+}
+.tour-editor-panel span:nth-child(3) {
+  width: 85%;
 }
 .tour-visual-shots {
   display: flex;

@@ -51,6 +51,8 @@ class User(Base):
     tos_accepted_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
     # First-visit product tour: set when the user finishes or skips it.
     tour_completed_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
+    # Creations walkthrough: set the first time the user finishes or skips it.
+    creations_tour_completed_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
 
     # Where and when the user is active (for the admin dashboard). Country comes from the
     # sign-in IP (the IP itself is not stored); timezone from the browser.
