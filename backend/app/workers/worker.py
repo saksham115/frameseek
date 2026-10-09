@@ -13,7 +13,12 @@ import logging
 import sys
 
 from app.utils import servicebus
-from app.workers.retention_cleanup import check_expired_subscriptions, cleanup_expired_content
+from app.workers.retention_cleanup import (
+    check_expired_subscriptions,
+    cleanup_expired_content,
+    daily_maintenance,
+    purge_deleted_accounts,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +44,9 @@ async def sync_stock_music() -> None:
 _SCHEDULED = {
     "retention-cleanup": cleanup_expired_content,
     "subscription-expiry": check_expired_subscriptions,
+    "purge-deleted-accounts": purge_deleted_accounts,
+    # What the frameseek-maintenance scheduled job runs (infra/production-apps.bicep).
+    "daily": daily_maintenance,
     "sync-stock-music": sync_stock_music,
 }
 
@@ -48,6 +56,7 @@ def main() -> None:
     fn = _SCHEDULED.get(task)
     if not fn:
         raise SystemExit(f"Unknown scheduled task '{task}'. Options: {', '.join(_SCHEDULED)}")
+    logging.basicConfig(level=logging.INFO)
     logger.info("Running scheduled task: %s", task)
     asyncio.run(fn())
 

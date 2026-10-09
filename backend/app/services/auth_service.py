@@ -11,6 +11,7 @@ from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.legal import accepted_current_terms
 from app.models.account_deletion_feedback import AccountDeletionFeedback
 from app.models.creation import Creation, UserAsset
 from app.models.folder import Folder
@@ -137,7 +138,7 @@ class AuthService:
         user = await self.repo.get_by_id(user_id)
         if not user:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-        if not user.tos_accepted_at:
+        if not accepted_current_terms(user.tos_accepted_at):
             await self.repo.update(user, tos_accepted_at=datetime.now(timezone.utc))
         return UserResponse.model_validate(user)
 
@@ -210,4 +211,9 @@ class AuthService:
             update(UserFeedback).where(UserFeedback.user_id == user_id).values(user_id=None, email=None)
         )
 
-        await self.repo.update(user, deleted_at=datetime.now(timezone.utc), storage_used_bytes=0, monthly_search_count=0)
+        # Google tokens are useless once the account is gone; the rest of the identity is
+        # removed after the grace period (purge_deleted_accounts).
+        await self.repo.update(
+            user, deleted_at=datetime.now(timezone.utc), storage_used_bytes=0, monthly_search_count=0,
+            google_access_token=None, google_refresh_token=None, google_token_expires_at=None,
+        )

@@ -174,6 +174,35 @@ resource worker 'Microsoft.App/jobs@2024-10-02-preview' = if (deployServices) {
   }
 }
 
+// Daily housekeeping (app/workers/worker.py "daily"): deletes videos past their plan's
+// retention period, expires lapsed subscriptions, and removes the identity left on accounts
+// deleted more than 30 days ago. The privacy policy promises all three.
+resource maintenance 'Microsoft.App/jobs@2024-03-01' = if (deployServices) {
+  name: 'frameseek-maintenance'
+  location: location
+  identity: workloadIdentity
+  properties: {
+    environmentId: environmentId
+    configuration: {
+      triggerType: 'Schedule'
+      replicaTimeout: 3600
+      replicaRetryLimit: 1
+      registries: registries
+      // 21:30 UTC is 03:00 in India, the quietest hour.
+      scheduleTriggerConfig: { cronExpression: '30 21 * * *', parallelism: 1, replicaCompletionCount: 1 }
+    }
+    template: {
+      containers: [{
+        name: 'maintenance'
+        image: apiImage
+        command: ['python', '-m', 'app.workers.worker', 'daily']
+        resources: { cpu: json('0.5'), memory: '1Gi' }
+        env: commonEnv
+      }]
+    }
+  }
+}
+
 resource migrate 'Microsoft.App/jobs@2024-03-01' = {
   name: 'frameseek-migrate'
   location: location

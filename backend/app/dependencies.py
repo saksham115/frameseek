@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.database import get_db
+from app.legal import accepted_current_terms
 from app.models.user import User
 from app.utils.security import decode_token
 
@@ -62,7 +63,7 @@ async def get_active_user(user: User = Depends(get_current_user)) -> User:
     Everything except the auth endpoints (sign-in, profile, accepting, sign-out and
     account deletion) requires this, so the platform isn't usable until acceptance.
     """
-    if user.tos_accepted_at is None:
+    if not accepted_current_terms(user.tos_accepted_at):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Accept the Terms of Service and Privacy Policy to continue.",

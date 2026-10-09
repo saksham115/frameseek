@@ -155,6 +155,10 @@ jobs:
               "ALLOWED_COUNTRIES=${{ vars.ALLOWED_COUNTRIES || 'IN' }}" \
             --output none
           az containerapp job update -n "$WORKER_JOB" -g "$RESOURCE_GROUP" --image "$REG/frameseek-api:$GITHUB_SHA" --output none
+          # The daily maintenance job is created by infra/production-apps.bicep; skip it until then.
+          if az containerapp job show -n frameseek-maintenance -g "$RESOURCE_GROUP" --output none 2>/dev/null; then
+            az containerapp job update -n frameseek-maintenance -g "$RESOURCE_GROUP" --image "$REG/frameseek-api:$GITHUB_SHA" --output none
+          fi
           az containerapp update -n "$WEB_APP" -g "$RESOURCE_GROUP" --image "$REG/frameseek-web:$GITHUB_SHA" --output none
 
       - name: Verify the deployed revisions and public health endpoint

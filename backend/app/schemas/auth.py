@@ -1,7 +1,9 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
+
+from app.legal import accepted_current_terms
 
 
 class UserResponse(BaseModel):
@@ -18,6 +20,12 @@ class UserResponse(BaseModel):
     is_admin: bool = False
 
     model_config = {"from_attributes": True}
+
+    @field_validator("tos_accepted_at")
+    @classmethod
+    def _only_current_terms(cls, v: datetime | None) -> datetime | None:
+        # Acceptance of an older version reads as none, so the app asks again.
+        return v if accepted_current_terms(v) else None
 
 
 class AcceptTosRequest(BaseModel):

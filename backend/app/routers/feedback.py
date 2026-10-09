@@ -56,9 +56,10 @@ async def submit_feedback(
     await db.flush()
     await db.refresh(feedback)
     # Also lands in Application Insights, so new feedback is visible without querying the DB.
+    # The email stays out of the logs: they can't be scrubbed when the account is deleted.
     logger.info(
-        "User feedback [%s] from %s on %s: %s",
-        data.category, user.email, data.page or "-", data.message[:500],
+        "User feedback [%s] from user %s on %s: %s",
+        data.category, user.user_id, data.page or "-", data.message[:500],
         extra={"custom_dimensions": {
             "feedback_id": str(feedback.feedback_id), "category": data.category, "page": data.page or "",
         }},

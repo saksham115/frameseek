@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { ArrowRight, ExternalLink, LockKeyhole, ShieldCheck, Trash2 } from "lucide-react";
+import { ArrowRight, ExternalLink, Globe, LockKeyhole, ShieldCheck, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { acceptTerms } from "@/api/auth";
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,7 @@ import LegalText from "@/components/LegalText";
 import LogoIcon from "@/components/LogoIcon";
 import ThemeToggle from "@/components/ThemeToggle";
 import { apiErrorMessage } from "@/lib/errors";
-import { PRIVACY_POLICY, TERMS_OF_SERVICE } from "@/lib/legal";
+import { MINIMUM_AGE, PRIVACY_POLICY, TERMS_OF_SERVICE } from "@/lib/legal";
 import { useAuth } from "@/store/auth";
 import { cn } from "@/lib/utils";
 
@@ -66,8 +66,12 @@ export default function TermsGate() {
             models on your videos.
           </li>
           <li>
-            <Trash2 size={14} /> Free-plan videos may be removed after 15 days, and
-            you can delete everything at any time.
+            <Trash2 size={14} /> Free-plan videos are removed 15 days after upload,
+            and you can delete everything at any time.
+          </li>
+          <li>
+            <Globe size={14} /> Your data is stored in India. Frames are sent to
+            Microsoft in the US to build your search index.
           </li>
         </ul>
         <div className="terms-gate-tabs" role="tablist" aria-label="Documents">
@@ -115,7 +119,7 @@ export default function TermsGate() {
             aria-describedby="terms-gate-title"
           />
           <span>
-            I have read and agree to the{" "}
+            I am {MINIMUM_AGE} or older, and I have read and agree to the{" "}
             <a href="/terms" target="_blank" rel="noreferrer">
               Terms of Service
             </a>{" "}
