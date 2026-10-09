@@ -146,6 +146,18 @@ async def complete_tour(
     return ApiResponse(data=await _user_response(db, current_user))
 
 
+@router.post("/creations-tour-complete", response_model=ApiResponse[UserResponse])
+async def complete_creations_tour(
+    current_user: User = Depends(get_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Record that the Creations walkthrough was finished or skipped (first time only)."""
+    if current_user.creations_tour_completed_at is None:
+        current_user.creations_tour_completed_at = datetime.now(timezone.utc)
+        await db.flush()
+    return ApiResponse(data=await _user_response(db, current_user))
+
+
 @router.delete("/me")
 async def delete_account(
     request: Request,

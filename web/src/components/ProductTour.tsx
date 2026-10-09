@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, ArrowRight, Scissors, Sparkles, X } from "lucide-react";
-import { completeTour } from "@/api/auth";
+import { ArrowLeft, ArrowRight, Clapperboard, Scissors, Sparkles, X } from "lucide-react";
+import { completeCreationsTour, completeTour } from "@/api/auth";
+import type { User } from "@/api/types";
 import { Button } from "@/components/ui/button";
 import LogoIcon from "@/components/LogoIcon";
 import { useAuth } from "@/store/auth";
-import { useTour } from "@/store/tour";
+import { useTour, type TourId } from "@/store/tour";
 import { useImportDialog } from "@/store/importDialog";
 import { cn } from "@/lib/utils";
 
@@ -15,7 +16,7 @@ interface Step {
   target?: string;
   title: string;
   body: string;
-  visual?: "welcome" | "shots";
+  visual?: "welcome" | "shots" | "creations" | "editor";
   /** Shown when the target isn't on screen (e.g. the sidebar on phones). */
   hiddenHint?: string;
 }
@@ -24,7 +25,7 @@ const MENU_HINT = "You’ll find this in the ☰ menu.";
 
 const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
 
-const STEPS: Step[] = [
+const MAIN_STEPS: Step[] = [
   {
     title: "Welcome to FrameSeek",
     body: "Here’s a tour of the essentials. You can skip it, and replay it later from Settings.",
@@ -69,6 +70,64 @@ const STEPS: Step[] = [
   },
 ];
 
+const CREATIONS_STEPS: Step[] = [
+  {
+    title: "Welcome to Creations",
+    body: "Turn moments from your videos into ready-to-post shorts, highlight reels and more. Creations is in beta, so expect it to keep improving.",
+    visual: "creations",
+  },
+  {
+    target: "new-creation",
+    title: "Start from a template",
+    body: "Pick a template for shorts, reels or brand videos. You can also open any video in your library and choose Create to start from the moment you’re on.",
+  },
+  {
+    title: "Shape it in the editor",
+    body: "Add, trim and reorder your moments, then set the format, captions, and intro and end cards. The preview updates as you go.",
+    visual: "editor",
+  },
+  {
+    target: "creation-tabs",
+    title: "Drafts save as you go",
+    body: "Everything you make saves as a draft automatically. When one is ready, render it and it moves to Rendered, ready to download.",
+  },
+  {
+    target: "feedback",
+    title: "Help shape Creations",
+    body: "It’s in beta, so your feedback counts. Tell us what works, what doesn’t and what you’d like next.",
+  },
+];
+
+interface TourDef {
+  steps: Step[];
+  isDone: (user: User) => boolean;
+  /** Recorded server-side so the tour doesn't reappear on other devices. */
+  complete: () => Promise<User>;
+  /** Primary button on the last step. */
+  cta: { label: string; run: (finish: (then?: string) => void) => void };
+}
+
+const TOURS: Record<TourId, TourDef> = {
+  main: {
+    steps: MAIN_STEPS,
+    isDone: (u) => !!u.tour_completed_at,
+    complete: completeTour,
+    cta: {
+      label: "Import a video",
+      run: (finish) => {
+        finish("/");
+        useImportDialog.getState().show();
+      },
+    },
+  },
+  creations: {
+    steps: CREATIONS_STEPS,
+    isDone: (u) => !!u.creations_tour_completed_at,
+    complete: completeCreationsTour,
+    cta: { label: "Choose a template", run: (finish) => finish("/creations?new=1") },
+  },
+};
+
 const GAP = 12;
 const PAD = 6;
 
@@ -103,26 +162,26 @@ function cardPosition(hole: Box, card: { width: number; height: number }) {
 }
 
 export default function ProductTour() {
-  const { open, step, goTo, close } = useTour();
+  const { open, tour, step, goTo, close } = useTour();
   const { user, setUser } = useAuth();
   const navigate = useNavigate();
   const cardRef = useRef<HTMLDivElement>(null);
   const primaryRef = useRef<HTMLButtonElement>(null);
   const [hole, setHole] = useState<Box | null>(null);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
-  const current = STEPS[step];
-  const last = step === STEPS.length - 1;
+  const def = TOURS[tour];
+  const steps = def.steps;
+  const current = steps[step];
+  const last = step === steps.length - 1;
 
   const finish = useCallback(
     (then?: string) => {
       close();
       if (then) navigate(then);
-      // Recorded server-side so the tour doesn't reappear on other devices.
-      if (!useAuth.getState().user?.tour_completed_at) {
-        completeTour().then(setUser).catch(() => undefined);
-      }
+      const me = useAuth.getState().user;
+      if (me && !def.isDone(me)) def.complete().then(setUser).catch(() => undefined);
     },
-    [close, navigate, setUser],
+    [close, navigate, setUser, def],
   );
 
   // Follow the target as the layout moves (resize, scroll, sidebar animation).
@@ -175,7 +234,7 @@ export default function ProductTour() {
     return () => window.removeEventListener("keydown", onKey, true);
   }, [open, step, last, goTo, finish]);
 
-  if (!open || !user) return null;
+  if (!open || !user || !current) return null;
 
   return createPortal(
     <div className="tour-root">
@@ -205,6 +264,24 @@ export default function ProductTour() {
             <Sparkles size={16} />
           </div>
         )}
+        {current.visual === "creations" && (
+          <div className="tour-visual tour-visual-welcome" aria-hidden="true">
+            <Clapperboard size={30} strokeWidth={1.6} />
+            <span className="nav-beta">Beta</span>
+          </div>
+        )}
+        {current.visual === "editor" && (
+          <div className="tour-visual tour-visual-editor" aria-hidden="true">
+            <span className="tour-editor-preview">
+              <span />
+            </span>
+            <span className="tour-editor-panel">
+              <span />
+              <span />
+              <span />
+            </span>
+          </div>
+        )}
         {current.visual === "shots" && (
           <div className="tour-visual tour-visual-shots" aria-hidden="true">
             {[2, 4, 1, 3, 2].map((n, i) => (
@@ -215,13 +292,13 @@ export default function ProductTour() {
           </div>
         )}
         <p className="tour-progress">
-          {step + 1} of {STEPS.length}
+          {step + 1} of {steps.length}
         </p>
         <h2 id="tour-title">{current.title}</h2>
         <p id="tour-body">{current.body}</p>
         {current.hiddenHint && !hole && <p className="tour-hint">{current.hiddenHint}</p>}
         <div className="tour-dots" aria-hidden="true">
-          {STEPS.map((_, i) => (
+          {steps.map((_, i) => (
             <span key={i} className={cn(i === step && "active")} />
           ))}
         </div>
@@ -240,11 +317,8 @@ export default function ProductTour() {
               <Button variant="outline" className="studio-button" onClick={() => finish()}>
                 Explore first
               </Button>
-              <Button ref={primaryRef} className="studio-button" onClick={() => {
-                  finish("/");
-                  useImportDialog.getState().show();
-                }}>
-                Import a video <ArrowRight />
+              <Button ref={primaryRef} className="studio-button" onClick={() => def.cta.run(finish)}>
+                {def.cta.label} <ArrowRight />
               </Button>
             </div>
           ) : (

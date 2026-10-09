@@ -17,6 +17,7 @@ class UserResponse(BaseModel):
     retention_days: int = 15
     tos_accepted_at: datetime | None = None
     tour_completed_at: datetime | None = None
+    creations_tour_completed_at: datetime | None = None
     is_admin: bool = False
 
     model_config = {"from_attributes": True}

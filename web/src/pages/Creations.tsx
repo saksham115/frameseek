@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
@@ -8,6 +8,8 @@ import { PageHeader } from "@/components/MediaUI";
 import CreationsGrid, { isDraft } from "@/components/creator/CreationsGrid";
 import TemplateGallery from "@/components/creator/TemplateGallery";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/store/auth";
+import { useTour } from "@/store/tour";
 
 const TABS = [
   { id: "drafts", label: "Drafts" },
@@ -33,6 +35,26 @@ export default function Creations() {
   const [params, setParams] = useSearchParams();
   const tab: Tab = TABS.some((t) => t.id === params.get("tab")) ? (params.get("tab") as Tab) : "drafts";
   const [gallery, setGallery] = useState(false);
+  // "?new=1" (the Creations tour's last step) opens the template gallery.
+  useEffect(() => {
+    if (params.get("new") !== "1") return;
+    setGallery(true);
+    params.delete("new");
+    setParams(params, { replace: true });
+  }, [params, setParams]);
+  // First visit to Creations: show its walkthrough once, after the first-visit product tour.
+  const user = useAuth((s) => s.user);
+  const tourOpen = useTour((s) => s.open);
+  const tourAutoStarted = useRef(false);
+  useEffect(() => {
+    if (!user?.tour_completed_at || user.creations_tour_completed_at || tourOpen) return;
+    const t = setTimeout(() => {
+      if (tourAutoStarted.current) return;
+      tourAutoStarted.current = true;
+      useTour.getState().start("creations");
+    }, 400);
+    return () => clearTimeout(t);
+  }, [user?.tour_completed_at, user?.creations_tour_completed_at, tourOpen]);
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["creations"],
     queryFn: listCreations,
@@ -52,13 +74,13 @@ export default function Creations() {
         title="Creations"
         description="Drafts save as you edit. Come back any time to finish, render and download."
         action={
-          <Button className="studio-button" onClick={() => setGallery(true)}>
+          <Button className="studio-button" data-tour="new-creation" onClick={() => setGallery(true)}>
             <Plus /> New creation
           </Button>
         }
       />
       <div className="library-toolbar">
-        <div className="filter-tabs" aria-label="Show creations">
+        <div className="filter-tabs" aria-label="Show creations" data-tour="creation-tabs">
           {TABS.map((t) => (
             <button
               key={t.id}

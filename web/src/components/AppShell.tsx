@@ -233,6 +233,7 @@ export default function AppShell() {
               <Icon size={17} strokeWidth={1.7} />
               <span>{label}</span>
               {to === "/search" && <span className="nav-new">AI</span>}
+              {to === "/creations" && <span className="nav-beta">Beta</span>}
               {to === "/creations" && drafts > 0 && (
                 <span className="nav-count" aria-label={`${drafts} drafts`}>{drafts}</span>
               )}
